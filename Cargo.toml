@@ -14,3 +14,4 @@ crate-type = ["cdylib", "rlib"]
 bitflags = "1.0"
 wasm-bindgen = "0.2.50"
 colored = "2.0"
+rustasm6502 = "0.1.2"

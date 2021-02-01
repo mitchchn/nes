@@ -29,10 +29,16 @@ impl Machine {
         self.cpu.reset()
     }
 
-    pub fn load(&self, rom: &[u8]) {
+    pub fn load(&self, rom: &[u8], start_at: u16) {
         for (i, b) in rom.iter().enumerate() {
             self.bus.borrow_mut().write(i as u16, *b);
         }
+
+        // Init reset vector
+        let lo = (start_at & 0x00FF) >> 8;
+        let hi = (start_at & 0xFF00) >> 8 as u8;
+        self.bus.borrow_mut().write(0xFFFC, lo as u8);
+        self.bus.borrow_mut().write(0xFFFD, hi as u8);
     }
 }
 
@@ -48,41 +54,18 @@ impl IO for Machine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn test_machine() {
         let mut m = Machine::new();
+        let rom = fs::read("src/asm/main.bin").expect("Could not open file");
 
-        // let mul = &[
-        // 0xa2, 0x10, 0x69, 0x02, 0xca, 0xd0, 0xfb
-        // ];
-
-        // let mul = &[0xA9, 0x05, 0xA2, 0x04, 0xCA, 0x69, 0x05, 0xCA, 0xD0, 0xFB];
-
-        let five_by_4 = &[0xA9, 0x05, 0xA2, 0x04, 0x69, 0x05, 0xCA];
-
-        // m.load(&[
-        //     // LDA #$05
-        //     0xA9, 0x05,
-        //     // ADC #$04
-        //     0x69, 0x04,
-        //     // SEC
-        //     0x38,
-        //     // SBC #$07
-        //     0xE9, 0x07,
-        // ]);
-
-        // ; multiply 5 * 4
-        //   lda #$05
-        //   ldx #$04
-        // loop:
-        //   adc #$05
-        //   dex
-
-        m.load(five_by_4);
+        m.load(&rom, 0x4000);
 
         m.reset();
 
         m.run();
+        m.bus.borrow_mut().flush_display();
     }
 }

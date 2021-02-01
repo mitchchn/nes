@@ -76,6 +76,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "colored",
+ "rustasm6502",
  "wasm-bindgen",
 ]
 
@@ -96,6 +97,12 @@ checksum = "991431c3519a3f36861882da93630ce66b52918dcf1b8e2fd66b397fc96f28df"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "rustasm6502"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7748510490c5e06e6696f4cbabcb821b68cfcc9823eebe6b52f1fb41f02d8f5e"
 
 [[package]]
 name = "syn"

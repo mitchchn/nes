@@ -15,6 +15,10 @@ impl Bus {
 
         b
     }
+
+    pub fn flush_display(&mut self) {
+        self.display.flush();
+    }
 }
 
 impl IO for Bus {
@@ -27,9 +31,9 @@ impl IO for Bus {
     }
 
     fn write(&mut self, addr: u16, data: u8) {
-        if addr >= 0x200 && addr <= 0x05ff {
+        if addr >= 0x200 && addr <= 0x5FF {
             self.display.write(addr - 0x200, data);
-        } else if addr <= std::u16::MAX {
+        } else {
             self.mem[addr as usize] = data;
         }
     }

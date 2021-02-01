@@ -33,19 +33,68 @@ bitflags! {
 const STACK: u16 = 0x0100;
 const STACK_TOP: u16 = 0x01FF;
 
+/// Each instruction on the 6502 uses one of thirteen
+/// memory addressing modes. These determine how the operand (if any) is looked up.
+///
+/// References:
+/// - http://www.obelisk.me.uk/6502/addressing.html
+/// - https://emudev.de/nes-emulator/opcodes-and-addressing-modes-the-6502/
+/// - https://lowendgaming.neocities.org/6502_addressing_modes.htm
+/// - https://slark.me/c64-downloads/6502-addressing-modes.pdf
+/// - https://www.pagetable.com/c64ref/6502/?tab=3
 #[derive(Debug, Clone, Copy)]
 pub enum Mode {
+    /// Implied
+    ///
+    /// e.g. `BRK`
     IMP,
+    /// Accumulator
+    ///
+    /// e.g. `ASL A`
+    ACC,
+    /// Immediate
+    ///
+    /// e.g. `AND #$AA`
     IMM,
+    /// Absolute
+    ///
+    /// e.g. `LDA $AAAA`
     ABS,
-    IZX,
-    IZY,
-    REL,
+    /// Absolute, X-Indexed
+    ///
+    /// e.g. `LDA $AAAA,X`
     ABX,
+    /// Absolute, Y-Indexed
+    ///
+    /// e.g. `LDA $AAAA,Y`
     ABY,
+    /// Zero Page
+    ///
+    /// e.g. `LDA $NN`
+    ZPG,
+    /// Zero Page, X-Indexed
+    ///
+    /// e.g. `LDA $AA,X`
     ZPX,
+    /// Zero Page, Y-Indexed
+    ///
+    /// e.g. `LDA $AA,Y`
     ZPY,
-    ZP0,
+    /// Zero Page Indirect, X-Indexed
+    ///
+    /// e.g. `LDA ($AA,X)`
+    ZIX,
+    /// Zero Page Indirect, Y-Indexed
+    ///
+    /// e.g. `LDA ($AA,Y)`
+    ZIY,
+    /// Relative
+    ///
+    /// e.g. `BEQ $AAAA`
+    REL,
+    /// Absolute Indirect
+    ///
+    /// e.g. `JMP ($AAAA)`
     IND,
 }
 
@@ -114,24 +163,24 @@ pub enum Opcode {
 pub type Instruction = (Opcode, Mode, u8, fn(&mut CPU6502) -> u8);
 
 const INSTRUCTIONS: [Instruction; 256] = [
-    (Opcode::BRK, Mode::IMM, 7, CPU6502::brk),
-    (Opcode::ORA, Mode::IZX, 6, CPU6502::ora),
+    (Opcode::BRK, Mode::IMP, 7, CPU6502::brk),
+    (Opcode::ORA, Mode::ZIX, 6, CPU6502::ora),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 3, CPU6502::nop),
-    (Opcode::ORA, Mode::ZP0, 3, CPU6502::ora),
-    (Opcode::ASL, Mode::ZP0, 5, CPU6502::asl),
+    (Opcode::ORA, Mode::ZPG, 3, CPU6502::ora),
+    (Opcode::ASL, Mode::ZPG, 5, CPU6502::asl),
     (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
     (Opcode::PHP, Mode::IMP, 3, CPU6502::php),
     (Opcode::ORA, Mode::IMM, 2, CPU6502::ora),
-    (Opcode::ASL, Mode::IMP, 2, CPU6502::asl_a),
+    (Opcode::ASL, Mode::ACC, 2, CPU6502::asl_a),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
     (Opcode::ORA, Mode::ABS, 4, CPU6502::ora),
     (Opcode::ASL, Mode::ABS, 6, CPU6502::asl),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
     (Opcode::BPL, Mode::REL, 2, CPU6502::bpl),
-    (Opcode::ORA, Mode::IZY, 5, CPU6502::ora),
+    (Opcode::ORA, Mode::ZIY, 5, CPU6502::ora),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
@@ -147,28 +196,28 @@ const INSTRUCTIONS: [Instruction; 256] = [
     (Opcode::ASL, Mode::ABX, 7, CPU6502::asl),
     (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
     (Opcode::JSR, Mode::ABS, 6, CPU6502::xxx),
-    (Opcode::AND, Mode::IZX, 6, CPU6502::and),
+    (Opcode::AND, Mode::ZIX, 6, CPU6502::and),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::BIT, Mode::ZP0, 3, CPU6502::xxx),
-    (Opcode::AND, Mode::ZP0, 3, CPU6502::and),
-    (Opcode::ROL, Mode::ZP0, 5, CPU6502::xxx),
+    (Opcode::BIT, Mode::ZPG, 3, CPU6502::xxx),
+    (Opcode::AND, Mode::ZPG, 3, CPU6502::and),
+    (Opcode::ROL, Mode::ZPG, 5, CPU6502::rol),
     (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
     (Opcode::PLP, Mode::IMP, 4, CPU6502::xxx),
     (Opcode::AND, Mode::IMM, 2, CPU6502::and),
-    (Opcode::ROL, Mode::IMP, 2, CPU6502::xxx),
+    (Opcode::ROL, Mode::ACC, 2, CPU6502::rol_a),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::BIT, Mode::ABS, 4, CPU6502::xxx),
     (Opcode::AND, Mode::ABS, 4, CPU6502::and),
-    (Opcode::ROL, Mode::ABS, 6, CPU6502::xxx),
+    (Opcode::ROL, Mode::ABS, 6, CPU6502::rol),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
     (Opcode::BMI, Mode::REL, 2, CPU6502::xxx),
-    (Opcode::AND, Mode::IZY, 5, CPU6502::and),
+    (Opcode::AND, Mode::ZIY, 5, CPU6502::and),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
     (Opcode::AND, Mode::ZPX, 4, CPU6502::and),
-    (Opcode::ROL, Mode::ZPX, 6, CPU6502::xxx),
+    (Opcode::ROL, Mode::ZPX, 6, CPU6502::rol),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
     (Opcode::SEC, Mode::IMP, 2, CPU6502::sec),
     (Opcode::AND, Mode::ABY, 4, CPU6502::and),
@@ -176,31 +225,31 @@ const INSTRUCTIONS: [Instruction; 256] = [
     (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
     (Opcode::AND, Mode::ABX, 4, CPU6502::and),
-    (Opcode::ROL, Mode::ABX, 7, CPU6502::xxx),
+    (Opcode::ROL, Mode::ABX, 7, CPU6502::rol),
     (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
     (Opcode::RTI, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::EOR, Mode::IZX, 6, CPU6502::xxx),
+    (Opcode::EOR, Mode::ZIX, 6, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 3, CPU6502::nop),
-    (Opcode::EOR, Mode::ZP0, 3, CPU6502::xxx),
-    (Opcode::LSR, Mode::ZP0, 5, CPU6502::xxx),
+    (Opcode::EOR, Mode::ZPG, 3, CPU6502::xxx),
+    (Opcode::LSR, Mode::ZPG, 5, CPU6502::lsr),
     (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
     (Opcode::PHA, Mode::IMP, 3, CPU6502::pha),
     (Opcode::EOR, Mode::IMM, 2, CPU6502::xxx),
-    (Opcode::LSR, Mode::IMP, 2, CPU6502::xxx),
+    (Opcode::LSR, Mode::ACC, 2, CPU6502::lsr_a),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::JMP, Mode::ABS, 3, CPU6502::jmp),
     (Opcode::EOR, Mode::ABS, 4, CPU6502::xxx),
-    (Opcode::LSR, Mode::ABS, 6, CPU6502::xxx),
+    (Opcode::LSR, Mode::ABS, 6, CPU6502::lsr),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
     (Opcode::BVC, Mode::REL, 2, CPU6502::xxx),
-    (Opcode::EOR, Mode::IZY, 5, CPU6502::xxx),
+    (Opcode::EOR, Mode::ZIY, 5, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
     (Opcode::EOR, Mode::ZPX, 4, CPU6502::xxx),
-    (Opcode::LSR, Mode::ZPX, 6, CPU6502::xxx),
+    (Opcode::LSR, Mode::ZPX, 6, CPU6502::lsr),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
     (Opcode::CLI, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::EOR, Mode::ABY, 4, CPU6502::xxx),
@@ -208,31 +257,31 @@ const INSTRUCTIONS: [Instruction; 256] = [
     (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
     (Opcode::EOR, Mode::ABX, 4, CPU6502::xxx),
-    (Opcode::LSR, Mode::ABX, 7, CPU6502::xxx),
+    (Opcode::LSR, Mode::ABX, 7, CPU6502::lsr),
     (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
     (Opcode::RTS, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::ADC, Mode::IZX, 6, CPU6502::adc),
+    (Opcode::ADC, Mode::ZIX, 6, CPU6502::adc),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 3, CPU6502::nop),
-    (Opcode::ADC, Mode::ZP0, 3, CPU6502::adc),
-    (Opcode::ROR, Mode::ZP0, 5, CPU6502::xxx),
+    (Opcode::ADC, Mode::ZPG, 3, CPU6502::adc),
+    (Opcode::ROR, Mode::ZPG, 5, CPU6502::ror),
     (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
     (Opcode::PLA, Mode::IMP, 4, CPU6502::pla),
     (Opcode::ADC, Mode::IMM, 2, CPU6502::adc),
-    (Opcode::ROR, Mode::IMP, 2, CPU6502::xxx),
+    (Opcode::ROR, Mode::ACC, 2, CPU6502::ror_a),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::JMP, Mode::IND, 5, CPU6502::jmp),
     (Opcode::ADC, Mode::ABS, 4, CPU6502::adc),
-    (Opcode::ROR, Mode::ABS, 6, CPU6502::xxx),
+    (Opcode::ROR, Mode::ABS, 6, CPU6502::ror),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
     (Opcode::BVS, Mode::REL, 2, CPU6502::xxx),
-    (Opcode::ADC, Mode::IZY, 5, CPU6502::adc),
+    (Opcode::ADC, Mode::ZIY, 5, CPU6502::adc),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
     (Opcode::ADC, Mode::ZPX, 4, CPU6502::adc),
-    (Opcode::ROR, Mode::ZPX, 6, CPU6502::xxx),
+    (Opcode::ROR, Mode::ZPX, 6, CPU6502::ror),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
     (Opcode::SEI, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::ADC, Mode::ABY, 4, CPU6502::adc),
@@ -240,15 +289,15 @@ const INSTRUCTIONS: [Instruction; 256] = [
     (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
     (Opcode::ADC, Mode::ABX, 4, CPU6502::adc),
-    (Opcode::ROR, Mode::ABX, 7, CPU6502::xxx),
+    (Opcode::ROR, Mode::ABX, 7, CPU6502::ror),
     (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::STA, Mode::IZX, 6, CPU6502::xxx),
+    (Opcode::STA, Mode::ZIX, 6, CPU6502::sta),
     (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::STY, Mode::ZP0, 3, CPU6502::xxx),
-    (Opcode::STA, Mode::ZP0, 3, CPU6502::xxx),
-    (Opcode::STX, Mode::ZP0, 3, CPU6502::xxx),
+    (Opcode::STY, Mode::ZPG, 3, CPU6502::xxx),
+    (Opcode::STA, Mode::ZPG, 3, CPU6502::xxx),
+    (Opcode::STX, Mode::ZPG, 3, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 3, CPU6502::xxx),
     (Opcode::DEY, Mode::IMP, 2, CPU6502::dey),
     (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
@@ -258,29 +307,29 @@ const INSTRUCTIONS: [Instruction; 256] = [
     (Opcode::STA, Mode::ABS, 4, CPU6502::sta),
     (Opcode::STX, Mode::ABS, 4, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::BCC, Mode::REL, 2, CPU6502::xxx),
-    (Opcode::STA, Mode::IZY, 6, CPU6502::xxx),
+    (Opcode::BCC, Mode::REL, 2, CPU6502::bcc),
+    (Opcode::STA, Mode::ZIY, 6, CPU6502::sta),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
     (Opcode::STY, Mode::ZPX, 4, CPU6502::xxx),
-    (Opcode::STA, Mode::ZPX, 4, CPU6502::xxx),
+    (Opcode::STA, Mode::ZPX, 4, CPU6502::sta),
     (Opcode::STX, Mode::ZPY, 4, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
     (Opcode::TYA, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::STA, Mode::ABY, 5, CPU6502::xxx),
+    (Opcode::STA, Mode::ABY, 5, CPU6502::sta),
     (Opcode::TXS, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 5, CPU6502::nop),
-    (Opcode::STA, Mode::ABX, 5, CPU6502::xxx),
+    (Opcode::STA, Mode::ABX, 5, CPU6502::sta),
     (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
     (Opcode::LDY, Mode::IMM, 2, CPU6502::ldy),
-    (Opcode::LDA, Mode::IZX, 6, CPU6502::lda),
+    (Opcode::LDA, Mode::ZIX, 6, CPU6502::lda),
     (Opcode::LDX, Mode::IMM, 2, CPU6502::ldx),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::LDY, Mode::ZP0, 3, CPU6502::ldy),
-    (Opcode::LDA, Mode::ZP0, 3, CPU6502::lda),
-    (Opcode::LDX, Mode::ZP0, 3, CPU6502::ldx),
+    (Opcode::LDY, Mode::ZPG, 3, CPU6502::ldy),
+    (Opcode::LDA, Mode::ZPG, 3, CPU6502::lda),
+    (Opcode::LDX, Mode::ZPG, 3, CPU6502::ldx),
     (Opcode::XXX, Mode::IMP, 3, CPU6502::xxx),
     (Opcode::TAY, Mode::IMP, 2, CPU6502::tay),
     (Opcode::LDA, Mode::IMM, 2, CPU6502::lda),
@@ -291,7 +340,7 @@ const INSTRUCTIONS: [Instruction; 256] = [
     (Opcode::LDX, Mode::ABS, 4, CPU6502::ldx),
     (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
     (Opcode::BCS, Mode::REL, 2, CPU6502::bcs),
-    (Opcode::LDA, Mode::IZY, 5, CPU6502::lda),
+    (Opcode::LDA, Mode::ZIY, 5, CPU6502::lda),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
     (Opcode::LDY, Mode::ZPX, 4, CPU6502::ldy),
@@ -307,44 +356,44 @@ const INSTRUCTIONS: [Instruction; 256] = [
     (Opcode::LDX, Mode::ABY, 4, CPU6502::ldx),
     (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
     (Opcode::CPY, Mode::IMM, 2, CPU6502::xxx),
-    (Opcode::CMP, Mode::IZX, 6, CPU6502::xxx),
+    (Opcode::CMP, Mode::ZIX, 6, CPU6502::cmp),
     (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
     (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::CPY, Mode::ZP0, 3, CPU6502::xxx),
-    (Opcode::CMP, Mode::ZP0, 3, CPU6502::xxx),
-    (Opcode::DEC, Mode::ZP0, 5, CPU6502::dec),
+    (Opcode::CPY, Mode::ZPG, 3, CPU6502::xxx),
+    (Opcode::CMP, Mode::ZPG, 3, CPU6502::cmp),
+    (Opcode::DEC, Mode::ZPG, 5, CPU6502::dec),
     (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::INY, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::CMP, Mode::IMM, 2, CPU6502::xxx),
+    (Opcode::INY, Mode::IMP, 2, CPU6502::iny),
+    (Opcode::CMP, Mode::IMM, 2, CPU6502::cmp),
     (Opcode::DEX, Mode::IMP, 2, CPU6502::dex),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::CPY, Mode::ABS, 4, CPU6502::xxx),
-    (Opcode::CMP, Mode::ABS, 4, CPU6502::xxx),
+    (Opcode::CMP, Mode::ABS, 4, CPU6502::cmp),
     (Opcode::DEC, Mode::ABS, 6, CPU6502::dec),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
     (Opcode::BNE, Mode::REL, 2, CPU6502::bne),
-    (Opcode::CMP, Mode::IZY, 5, CPU6502::xxx),
+    (Opcode::CMP, Mode::ZIY, 5, CPU6502::cmp),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::CMP, Mode::ZPX, 4, CPU6502::xxx),
+    (Opcode::CMP, Mode::ZPX, 4, CPU6502::cmp),
     (Opcode::DEC, Mode::ZPX, 6, CPU6502::dec),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
     (Opcode::CLD, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::CMP, Mode::ABY, 4, CPU6502::xxx),
+    (Opcode::CMP, Mode::ABY, 4, CPU6502::cmp),
     (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
     (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::CMP, Mode::ABX, 4, CPU6502::xxx),
+    (Opcode::CMP, Mode::ABX, 4, CPU6502::cmp),
     (Opcode::DEC, Mode::ABX, 7, CPU6502::dec),
     (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
     (Opcode::CPX, Mode::IMM, 2, CPU6502::xxx),
-    (Opcode::SBC, Mode::IZX, 6, CPU6502::sbc),
+    (Opcode::SBC, Mode::ZIX, 6, CPU6502::sbc),
     (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
     (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::CPX, Mode::ZP0, 3, CPU6502::xxx),
-    (Opcode::SBC, Mode::ZP0, 3, CPU6502::sbc),
-    (Opcode::INC, Mode::ZP0, 5, CPU6502::xxx),
+    (Opcode::CPX, Mode::ZPG, 3, CPU6502::xxx),
+    (Opcode::SBC, Mode::ZPG, 3, CPU6502::sbc),
+    (Opcode::INC, Mode::ZPG, 5, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
     (Opcode::INX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::SBC, Mode::IMM, 2, CPU6502::sbc),
@@ -355,7 +404,7 @@ const INSTRUCTIONS: [Instruction; 256] = [
     (Opcode::INC, Mode::ABS, 6, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
     (Opcode::BEQ, Mode::REL, 2, CPU6502::beq),
-    (Opcode::SBC, Mode::IZY, 5, CPU6502::sbc),
+    (Opcode::SBC, Mode::ZIY, 5, CPU6502::sbc),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
     (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
     (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
@@ -393,7 +442,7 @@ pub struct CPU6502 {
 
     // Current instruction
     opcode: Opcode,
-    addr: u16,
+    op_addr: u16,
     cycles_left: u8,
 }
 
@@ -409,7 +458,7 @@ impl CPU6502 {
             status: Flags::empty(),
             cycles: 0,
             opcode: Opcode::BRK,
-            addr: 0,
+            op_addr: 0,
             cycles_left: 0,
         };
 
@@ -422,7 +471,7 @@ impl CPU6502 {
         // This is stored at a predetermined location, 0xFFFC.
         //
         let pc_lo = self.read(0xFFFC) as u16;
-        let pc_hi = self.read(0xFFFC + 1) as u16;
+        let pc_hi = self.read(0xFFFD) as u16;
         let pc = (pc_hi << 8) | pc_lo;
 
         // Stack poiner counts *down* so starts at 0XFF (255).
@@ -438,28 +487,27 @@ impl CPU6502 {
         self.sp = sp;
         self.status = status;
 
-        // Reset instruction data
         self.opcode = Opcode::BRK;
-        self.addr = 0;
+        self.op_addr = 0;
         self.cycles_left = 0;
     }
 
     pub fn execute(&mut self, (opcode, mode, cycles, op): Instruction) -> u8 {
         self.opcode = opcode;
 
-        self.addr = match mode {
+        match mode {
             Mode::ABS => self.abs(),
             Mode::ABX => self.abx(),
             Mode::ABY => self.aby(),
             Mode::IMM => self.imm(),
-            Mode::IMP => self.imp(),
             Mode::ZPX => self.zpx(),
-            Mode::ZP0 => self.zp0(),
+            Mode::ZPG => self.zpg(),
             Mode::ZPY => self.zpy(),
             Mode::IND => self.ind(),
             Mode::REL => self.rel(),
-            Mode::IZX => self.izx(),
-            Mode::IZY => self.izy(),
+            Mode::ZIX => self.zix(),
+            Mode::ZIY => self.ziy(),
+            Mode::ACC | Mode::IMP => {}
         };
 
         self.cycles_left = cycles;
@@ -468,8 +516,19 @@ impl CPU6502 {
             "{:#?} {}",
             opcode,
             match mode {
-                Mode::IMM => format!("#${}", self.read(self.addr)),
-                _ => "(unimp)".to_string(),
+                Mode::IMP => "".to_string(),
+                Mode::IMM => format!("#${}", self.read(self.op_addr)),
+                Mode::ACC => "A".to_string(),
+                Mode::ABS => format!("{:04X}", self.op_addr),
+                Mode::ABX => format!("{:04X},X", self.op_addr),
+                Mode::ABY => format!("{:04X},Y", self.op_addr),
+                Mode::ZPG => format!("{:02X}", self.op_addr),
+                Mode::ZPX => format!("{:02X},X", self.op_addr),
+                Mode::ZPY => format!("{:02X},Y", self.op_addr),
+                Mode::ZIX => format!("({:02X},X)", self.op_addr),
+                Mode::ZIY => format!("({:02X},Y)", self.op_addr),
+                Mode::IND => format!("({:04X})", self.op_addr),
+                Mode::REL => format!("{:04X}", self.op_addr),
             }
         );
 
@@ -546,85 +605,89 @@ impl CPU6502 {
     //
 
     /// Absolute
-    fn abs(&mut self) -> u16 {
-        self.pop_u16()
+    fn abs(&mut self) {
+        self.op_addr = self.pop_u16();
     }
 
     // Immediate
-    fn imm(&mut self) -> u16 {
+    fn imm(&mut self) {
         let addr = self.pc;
         self.pc += 1;
-        addr
+        self.op_addr = addr;
     }
 
-    /// Implied
-    fn imp(&mut self) -> u16 {
-        self.pc
-    }
-
-    /// Indirect
-    fn ind(&mut self) -> u16 {
+    /// Absolute Indirect
+    fn ind(&mut self) {
         let addr_ptr = self.pop_u16();
 
         let lo = self.read(addr_ptr) as u16;
         let hi = self.read(addr_ptr + 1) as u16;
         let addr = (hi << 8) | lo;
 
-        addr
+        self.op_addr = addr;
     }
 
     /// Zero Page
-    fn zp0(&mut self) -> u16 {
+    fn zpg(&mut self) {
         let lo = self.pop_u8();
-        0x0000 | (lo as u16)
+        let addr = 0x0000 | (lo as u16);
+
+        self.op_addr = addr;
     }
 
-    /// Zero Page Indexed, X
-    fn zpx(&mut self) -> u16 {
+    /// Zero Page, X-Indexed
+    fn zpx(&mut self) {
         let lo = self.pop_u8();
         // No carry:
         // Even though the final value is 16 bits,
         // wrap around if the X offset + lo bit > 0xFF.
         let lo_idx = lo.wrapping_add(self.x);
-        0x0000 | (lo_idx as u16)
+        let addr = 0x0000 | (lo_idx as u16);
+
+        self.op_addr = addr;
     }
 
-    /// Zero Page Indexed, Y
-    fn zpy(&mut self) -> u16 {
+    /// Zero Page, Y-Indexed
+    fn zpy(&mut self) {
         let lo = self.pop_u8();
         // No carry:
         // Even though the final value is 16 bits,
         // wrap around if the Y offset + lo bit > 0xFF.
         let lo_idx = lo.wrapping_add(self.y);
-        0x0000 | (lo_idx as u16)
+        let addr = 0x0000 | (lo_idx as u16);
+
+        self.op_addr = addr;
     }
 
-    /// Absolute Indexed, X
-    fn abx(&mut self) -> u16 {
-        let abs_addr = self.abs();
+    /// Absolute, X-Indexed
+    fn abx(&mut self) {
+        self.abs();
+        let abs_addr = self.op_addr;
         // Carry offset
         let addr = abs_addr + self.x as u16;
         if self.crossed_page_boundary(addr) {
             self.cycles_left += 1;
         }
 
-        addr
+        self.op_addr = addr;
     }
 
-    /// Absolute Indexed, Y
-    fn aby(&mut self) -> u16 {
-        let abs_addr = self.abs();
+    /// Absolute, Y-Indexed
+    fn aby(&mut self) {
+        self.abs();
+        let abs_addr = self.op_addr;
+
         // Carry offset
         let addr = abs_addr + self.y as u16;
         if self.crossed_page_boundary(addr) {
             self.cycles_left += 1;
         }
 
-        addr
+        self.op_addr = addr;
     }
 
     /// Relative
-    fn rel(&mut self) -> u16 {
+    fn rel(&mut self) {
         // offset is a 1-byte signed value:
         //
         // 0x00 - 0xFD is positive (0 - 127)
@@ -632,22 +695,24 @@ impl CPU6502 {
         let offset = self.pop_u8();
 
         // Same as offset > 0x7f
-        if offset & 0x80 == 0x80 {
+        let addr = if offset & 0x80 == 0x80 {
             // Any 16-bit value + 0xffff wraps around to equal itself.
             // if the offset is, e.g., 0x90 (-112 in two's complement)
             // we add 0xff90 which wraps around to (pc - 112).
             self.pc.wrapping_add(0xff00 | (offset as u16))
         } else {
             self.pc.wrapping_add(offset as u16)
-        }
+        };
+
+        self.op_addr = addr;
     }
 
-    /// X-Indexed, Indirect
+    /// Zero Page Indirect, X-Indexed
     ///
     /// Operand is zero page address.
     /// Absolute address is word in (OP + X, OP + X + 1).
     /// No carry.
-    fn izx(&mut self) -> u16 {
+    fn zix(&mut self) {
         let ptr_lo = self.pop_u8();
         let ptr_lo_idx = ptr_lo.wrapping_add(self.x);
         let ptr = 0x0000 | (ptr_lo_idx as u16);
@@ -656,24 +721,27 @@ impl CPU6502 {
         let hi = self.read(ptr + 1) as u16;
         let addr = (hi << 8) | lo;
 
-        addr
+        self.op_addr = addr;
     }
 
-    /// Indirect, Y-Indexed
+    /// Zero Page Indirect, Y-Indexed
     ///
     /// Operand is zero page address.
     /// Absolute address is word in (OP, OP + 1) offset by Y.
-    fn izy(&mut self) -> u16 {
-        let ptr = self.zp0();
+    fn ziy(&mut self) {
+        self.zpg();
+        let ptr = self.op_addr;
 
         let lo = self.read(ptr) as u16;
         let hi = self.read(ptr + 1) as u16;
-        let addr = (hi << 8) | lo;
+        let mut addr = (hi << 8) | lo;
         if self.crossed_page_boundary(addr) {
             self.cycles_left += 1;
         }
 
-        addr + (self.y as u16)
+        addr += self.y as u16;
+
+        self.op_addr = addr;
     }
 
     //
@@ -693,7 +761,7 @@ impl CPU6502 {
     ///
     fn adc(&mut self) -> u8 {
         let acc = self.a;
-        let op = self.read(self.addr);
+        let op = self.read(self.op_addr);
 
         self.add_a_(acc, op);
 
@@ -703,7 +771,7 @@ impl CPU6502 {
     /// AND - Logical And
     ///
     fn and(&mut self) -> u8 {
-        let byte = self.read(self.addr);
+        let byte = self.read(self.op_addr);
         self.a &= byte;
         self.set_arithmetic_flags(self.a);
         0
@@ -712,23 +780,150 @@ impl CPU6502 {
     /// ASL - Arithmetic Shift Left
     ///
     fn asl(&mut self) -> u8 {
-        let byte = self.read(self.addr);
-        let shifted = byte.wrapping_shl(1);
-        self.write(self.addr, shifted);
+        let byte = self.read(self.op_addr);
 
-        self.status.set(Flags::C, shifted & 0xf0 != byte & 0xf0);
-        self.set_arithmetic_flags(shifted);
+        let asl_value = self.asl_(byte);
+        self.write(self.op_addr, asl_value);
+
+        self.set_arithmetic_flags(asl_value);
 
         0
     }
 
     fn asl_a(&mut self) -> u8 {
         let acc = self.a;
-        self.a = self.a.wrapping_shl(1);
-        self.status.set(Flags::C, self.a & 0xf0 != acc & 0xf0);
+
+        let asl_value = self.asl_(acc);
+        self.a = asl_value;
+
+        self.set_arithmetic_flags(asl_value);
+
+        0
+    }
+
+    fn asl_(&mut self, value: u8) -> u8 {
+        // Left shifting will implicitly set bit 0 to 0
+        let asl_value = value << 1;
+
+        // Place old bit 7 in the carry flag
+        // self.status.set(Flags::C, asl_value & 0xf0 != value & 0xf0);
+        let seven_bit = value & (1 << 7);
+        self.status.set(Flags::C, seven_bit != 0);
+
+        asl_value
+    }
+
+    /// LSR - Logical Shift Right
+    ///
+    fn lsr(&mut self) -> u8 {
+        let byte = self.read(self.op_addr);
+
+        let lsr_value = self.lsr_(byte);
+        self.write(self.op_addr, lsr_value);
+
+        self.set_arithmetic_flags(lsr_value);
+        0
+    }
+
+    fn lsr_a(&mut self) -> u8 {
+        let acc = self.a;
+
+        let lsr_value = self.lsr_(acc);
+        self.a = lsr_value;
+
+        self.set_arithmetic_flags(lsr_value);
+        0
+    }
+
+    fn lsr_(&mut self, value: u8) -> u8 {
+        let zero_bit = value & (1 << 0);
+        self.status.set(Flags::C, zero_bit != 0);
+        value >> 1
+    }
+
+    /// ROL - Rotate Left
+    ///
+    fn rol(&mut self) -> u8 {
+        let byte = self.read(self.op_addr);
+
+        let rol_value = self.rol_(byte);
+        self.write(self.op_addr, rol_value);
+
+        self.set_arithmetic_flags(rol_value);
+
+        0
+    }
+
+    fn rol_a(&mut self) -> u8 {
+        let acc = self.a;
+
+        let rol_value = self.rol_(acc);
+        self.a = rol_value;
+
         self.set_arithmetic_flags(self.a);
 
         0
+    }
+
+    fn rol_(&mut self, value: u8) -> u8 {
+        let carry_bit = (self.status & Flags::C).bits();
+
+        // Shift left and change bit 0 to value of old carry bit.
+        let mut rol_value = value << 1;
+        if carry_bit > 0 {
+            rol_value |= 1 << 0;
+        } else {
+            rol_value &= !(1 << 0);
+        }
+
+        // Set carry flag to old bit 7
+        let seven_bit = value & (1 << 7);
+        self.status.set(Flags::C, seven_bit != 0);
+
+        self.status.set(Flags::C, seven_bit != 0);
+        rol_value
+    }
+
+    /// ROR - Rotate Right
+    ///
+    fn ror(&mut self) -> u8 {
+        let byte = self.read(self.op_addr);
+
+        let ror_value = self.ror_(byte);
+        self.write(self.op_addr, ror_value);
+
+        self.set_arithmetic_flags(byte);
+
+        0
+    }
+
+    fn ror_a(&mut self) -> u8 {
+        let acc = self.a;
+
+        let ror_value = self.ror_(acc);
+        self.a = ror_value;
+
+        self.set_arithmetic_flags(self.a);
+
+        0
+    }
+
+    fn ror_(&mut self, value: u8) -> u8 {
+        let carry_bit = (self.status & Flags::C).bits();
+
+        // Shift right and set bit 7 to contents of old carry bit.
+        let mut ror_value = value >> 1;
+        if carry_bit > 0 {
+            ror_value |= 1 << 7;
+        } else {
+            ror_value &= !(1 << 7);
+        }
+
+        // Set carry flag to old bit 0
+        let zero_bit = value & (1 << 0);
+        self.status.set(Flags::C, zero_bit != 0);
+
+        ror_value
     }
 
     /// BRK - Break
@@ -746,7 +941,7 @@ impl CPU6502 {
         let acc = self.a;
         // One's complement
         // Don't add 1 since we're adding the carry bit.
-        let op = self.read(self.addr) ^ 0xFF;
+        let op = self.read(self.op_addr) ^ 0xFF;
 
         self.add_a_(acc, op);
 
@@ -776,11 +971,21 @@ impl CPU6502 {
         self.set_arithmetic_flags(self.a);
     }
 
+    /// BCC - Branch if Carry Clear
+    fn bcc(&mut self) -> u8 {
+        if !self.status.contains(Flags::C) {
+            self.cycles_left += 1;
+            self.branch_(self.op_addr);
+        }
+
+        0
+    }
+
     /// BCS - Branch if Carry Set
     fn bcs(&mut self) -> u8 {
         if self.status.contains(Flags::C) {
             self.cycles_left += 1;
-            self.branch_(self.addr);
+            self.branch_(self.op_addr);
         }
 
         0
@@ -790,7 +995,7 @@ impl CPU6502 {
     fn beq(&mut self) -> u8 {
         if self.status.contains(Flags::Z) {
             self.cycles_left += 1;
-            self.branch_(self.addr);
+            self.branch_(self.op_addr);
         }
 
         0
@@ -800,7 +1005,7 @@ impl CPU6502 {
     fn bne(&mut self) -> u8 {
         if !self.status.contains(Flags::Z) {
             self.cycles_left += 1;
-            self.branch_(self.addr);
+            self.branch_(self.op_addr);
         }
 
         0
@@ -810,7 +1015,7 @@ impl CPU6502 {
     fn bpl(&mut self) -> u8 {
         if !self.status.contains(Flags::N) {
             self.cycles_left += 1;
-            self.branch_(self.addr);
+            self.branch_(self.op_addr);
         }
         0
     }
@@ -834,9 +1039,9 @@ impl CPU6502 {
     /// DEC - Decrement
     ///
     fn dec(&mut self) -> u8 {
-        let val = self.read(self.addr).wrapping_sub(1);
+        let val = self.read(self.op_addr).wrapping_sub(1);
 
-        self.write(self.addr, val);
+        self.write(self.op_addr, val);
         self.set_arithmetic_flags(val);
 
         0
@@ -860,11 +1065,33 @@ impl CPU6502 {
         0
     }
 
+    /// iny - Increment Y
+    ///
+    fn iny(&mut self) -> u8 {
+        self.y = self.y.wrapping_add(1);
+        self.set_arithmetic_flags(self.y);
+
+        0
+    }
+
+    /// JMP - CMP
+    ///
+    /// http://www.obelisk.me.uk/6502/reference.html#CMP
+    fn cmp(&mut self) -> u8 {
+        let byte = self.read(self.op_addr);
+        self.status.set(Flags::C, self.a >= byte);
+        self.status.set(Flags::Z, self.a == byte);
+        self.status
+            .set(Flags::N, self.a.wrapping_sub(byte) & (1 << 7) != 0);
+
+        0
+    }
+
     /// JMP - Jump
     ///
     /// http://www.obelisk.me.uk/6502/reference.html#JMP
     fn jmp(&mut self) -> u8 {
-        self.pc = self.addr;
+        self.pc = self.op_addr;
         0
     }
 
@@ -872,7 +1099,7 @@ impl CPU6502 {
     ///
     /// http://www.thealmightyguru.com/Games/Hacking/Wiki/index.php?title=LDA
     fn lda(&mut self) -> u8 {
-        self.a = self.read(self.addr);
+        self.a = self.read(self.op_addr);
         self.set_arithmetic_flags(self.a);
         0
     }
@@ -881,7 +1108,7 @@ impl CPU6502 {
     ///
     /// http://www.thealmightyguru.com/Games/Hacking/Wiki/index.php?title=LDA
     fn ldx(&mut self) -> u8 {
-        self.x = self.read(self.addr);
+        self.x = self.read(self.op_addr);
         self.set_arithmetic_flags(self.x);
         0
     }
@@ -890,7 +1117,7 @@ impl CPU6502 {
     ///
     /// http://www.thealmightyguru.com/Games/Hacking/Wiki/index.php?title=LDA
     fn ldy(&mut self) -> u8 {
-        self.y = self.read(self.addr);
+        self.y = self.read(self.op_addr);
         self.set_arithmetic_flags(self.y);
         0
     }
@@ -903,7 +1130,7 @@ impl CPU6502 {
     /// ORA - OR Memory With Accumulator
     /// A OR M -> A
     fn ora(&mut self) -> u8 {
-        self.a |= self.read(self.addr);
+        self.a |= self.read(self.op_addr);
         self.set_arithmetic_flags(self.a);
         0
     }
@@ -961,7 +1188,7 @@ impl CPU6502 {
     ///
     /// http://www.thealmightyguru.com/Games/Hacking/Wiki/index.php?title=STA
     fn sta(&mut self) -> u8 {
-        self.write(self.addr, self.a);
+        self.write(self.op_addr, self.a);
         0
     }
 
@@ -1113,10 +1340,13 @@ mod tests {
 
         Machine::write(&mut m, 0x0120, 0xFC);
 
-        m.load(&[
-            // JMP ($0120)
-            0x6C, 0x20, 0x01,
-        ]);
+        m.load(
+            &[
+                // JMP ($0120)
+                0x6C, 0x20, 0x01,
+            ],
+            0x0000,
+        );
 
         m.cpu.clock();
 
@@ -1128,10 +1358,13 @@ mod tests {
         let mut m = Machine::new();
         m.reset();
 
-        m.load(&[
-            // JMP $0120
-            0x4C, 0x20, 0x01,
-        ]);
+        m.load(
+            &[
+                // JMP $0120
+                0x4C, 0x20, 0x01,
+            ],
+            0x0000,
+        );
 
         m.cpu.clock();
 
@@ -1143,10 +1376,13 @@ mod tests {
         let mut m = Machine::new();
         m.reset();
 
-        m.load(&[
-            // LDA #51
-            0xA9, 0x33,
-        ]);
+        m.load(
+            &[
+                // LDA #51
+                0xA9, 0x33,
+            ],
+            0x0000,
+        );
 
         m.cpu.clock();
 
@@ -1161,10 +1397,13 @@ mod tests {
         // Target value
         m.write(0x80FC, 0x2B);
 
-        m.load(&[
-            // LDA $80FC
-            0xAD, 0xFC, 0x80,
-        ]);
+        m.load(
+            &[
+                // LDA $80FC
+                0xAD, 0xFC, 0x80,
+            ],
+            0,
+        );
 
         m.cpu.clock();
 
@@ -1177,10 +1416,13 @@ mod tests {
         m.reset();
         m.cpu.a = 0x33;
 
-        m.load(&[
-            // STA $0xAB
-            0x8D, 0xAB,
-        ]);
+        m.load(
+            &[
+                // STA $0xAB
+                0x8D, 0xAB,
+            ],
+            0,
+        );
 
         m.cpu.clock();
 
@@ -1194,8 +1436,8 @@ mod tests {
 
         m.write(0x2000, 0x05);
         m.cpu.pc = 0x2000;
-        let addr = m.cpu.rel();
-        assert_eq!(addr, 0x2006);
+        m.cpu.rel();
+        assert_eq!(m.cpu.op_addr, 0x2006);
     }
 
     #[test]
@@ -1205,8 +1447,8 @@ mod tests {
 
         m.write(0x2000, 0x85);
         m.cpu.pc = 0x2000;
-        let addr = m.cpu.rel();
-        assert_eq!(addr, 0x1F86);
+        m.cpu.rel();
+        assert_eq!(m.cpu.op_addr, 0x1F86);
     }
 
     #[test]
@@ -1217,8 +1459,8 @@ mod tests {
         m.write(0x0000, 0x20);
         m.write(0x0024, 0x74);
         m.write(0x0025, 0x20);
-        let addr = m.cpu.izx();
-        assert_eq!(addr, 0x2074);
+        m.cpu.zix();
+        assert_eq!(m.cpu.op_addr, 0x2074);
     }
 
     #[test]
@@ -1229,8 +1471,8 @@ mod tests {
         m.write(0x0000, 0x20);
         m.write(0x0020, 0x74);
         m.write(0x0021, 0x20);
-        let addr = m.cpu.izy();
-        assert_eq!(addr, 0x2078);
+        m.cpu.ziy();
+        assert_eq!(m.cpu.op_addr, 0x2078);
     }
 
     #[test]
@@ -1240,25 +1482,28 @@ mod tests {
         m.reset();
         m.cpu.x = 0x0F;
         m.write(0x0000, 0x80);
-        let addr = m.cpu.zpx();
-        assert_eq!(addr, 0x008F);
+        m.cpu.zpx();
+        assert_eq!(m.cpu.op_addr, 0x008F);
 
         // Test w/wrap-around in lo bit
         m.reset();
         m.cpu.x = 0xFF;
         m.write(0x0000, 0x80);
-        let addr = m.cpu.zpx();
-        assert_eq!(addr, 0x007F);
+        m.cpu.zpx();
+        assert_eq!(m.cpu.op_addr, 0x007F);
     }
 
     #[test]
     fn test_asl() {
         let mut m = Machine::new();
         m.reset();
-        m.load(&[
-            // ASL A
-            0x0A,
-        ]);
+        m.load(
+            &[
+                // ASL A
+                0x0A,
+            ],
+            0,
+        );
         m.cpu.a = 2;
         m.cpu.clock();
         assert_eq!(m.cpu.a, 4);
@@ -1274,10 +1519,13 @@ mod tests {
     #[test]
     fn test_dex() {
         let mut m = Machine::new();
-        m.load(&[
-            // DEX
-            0xCA,
-        ]);
+        m.load(
+            &[
+                // DEX
+                0xCA,
+            ],
+            0,
+        );
         // From positive to positive (5 -> 4)
         m.reset();
         m.cpu.x = 0x05;
@@ -1301,10 +1549,13 @@ mod tests {
     #[test]
     fn test_and() {
         let mut m = Machine::new();
-        m.load(&[
-            // AND #$0x74
-            0x29, 0x74,
-        ]);
+        m.load(
+            &[
+                // AND #$0x74
+                0x29, 0x74,
+            ],
+            0,
+        );
 
         m.reset();
         m.cpu.a = 0x58;
@@ -1315,10 +1566,13 @@ mod tests {
     #[test]
     fn test_beq() {
         let mut m = Machine::new();
-        m.load(&[
-            // BEQ ($0x10)
-            0xF0, 0x10,
-        ]);
+        m.load(
+            &[
+                // BEQ ($0x10)
+                0xF0, 0x10,
+            ],
+            0,
+        );
 
         // Take branch
         m.reset();
@@ -1353,10 +1607,13 @@ mod tests {
         // No carry
         // 9 + 5 = 14
         m.reset();
-        m.load(&[
-            // ADC #$05
-            0x69, 0x05,
-        ]);
+        m.load(
+            &[
+                // ADC #$05
+                0x69, 0x05,
+            ],
+            0,
+        );
         m.cpu.a = 0x09;
         m.cpu.clock();
         assert_eq!(m.cpu.a, 0x0E);
@@ -1366,10 +1623,13 @@ mod tests {
         // No carry
         // 127 + 5 = 132
         m.reset();
-        m.load(&[
-            // ADC #$05
-            0x69, 0x05,
-        ]);
+        m.load(
+            &[
+                // ADC #$05
+                0x69, 0x05,
+            ],
+            0,
+        );
         m.cpu.a = 0x7F;
         m.cpu.clock();
         assert_eq!(m.cpu.a, 0x84);
@@ -1379,10 +1639,13 @@ mod tests {
         // Carry
         // 127 - 16 = 111
         m.reset();
-        m.load(&[
-            // ADC #$F0 % add -16
-            0x69, 0xF0,
-        ]);
+        m.load(
+            &[
+                // ADC #$F0 % add -16
+                0x69, 0xF0,
+            ],
+            0,
+        );
         m.cpu.a = 0x7F;
         m.cpu.clock();
         assert_eq!(m.cpu.a, 0x6F);
@@ -1392,10 +1655,13 @@ mod tests {
         // No carry
         // 16 - 32 = -16
         m.reset();
-        m.load(&[
-            // ADC #$E0 % add -32
-            0x69, 0xE0,
-        ]);
+        m.load(
+            &[
+                // ADC #$E0 % add -32
+                0x69, 0xE0,
+            ],
+            0,
+        );
         m.cpu.a = 0x10;
         m.cpu.clock();
         assert_eq!(m.cpu.a, 0xF0);
@@ -1404,10 +1670,13 @@ mod tests {
         // N + N = N
         // Carry
         m.reset();
-        m.load(&[
-            // ADC #$FF % add -1
-            0x69, 0xFF,
-        ]);
+        m.load(
+            &[
+                // ADC #$FF % add -1
+                0x69, 0xFF,
+            ],
+            0,
+        );
         m.cpu.a = 0x90;
         m.cpu.clock();
         assert_eq!(m.cpu.a, 0x8F);
@@ -1416,10 +1685,13 @@ mod tests {
         // N + N = N (overflow)
         // Carry
         m.reset();
-        m.load(&[
-            // ADC #$A0
-            0x69, 0xA0,
-        ]);
+        m.load(
+            &[
+                // ADC #$A0
+                0x69, 0xA0,
+            ],
+            0,
+        );
         m.cpu.a = 0x90;
         m.cpu.clock();
         assert_eq!(m.cpu.a, 0x30);
@@ -1434,10 +1706,13 @@ mod tests {
         // Carry bit not set
         // 9 - 5 = 3 (!!)
         m.reset();
-        m.load(&[
-            // SBC #$05
-            0xE9, 0x05,
-        ]);
+        m.load(
+            &[
+                // SBC #$05
+                0xE9, 0x05,
+            ],
+            0,
+        );
         m.cpu.a = 0x09;
         m.cpu.clock();
         assert_eq!(m.cpu.a, 0x03);
@@ -1447,10 +1722,13 @@ mod tests {
         // Carry bit set
         // 9 - 5 = 4
         m.reset();
-        m.load(&[
-            // SBC #$05
-            0xE9, 0x05,
-        ]);
+        m.load(
+            &[
+                // SBC #$05
+                0xE9, 0x05,
+            ],
+            0,
+        );
         m.cpu.status.set(Flags::C, true);
         m.cpu.a = 0x09;
         m.cpu.clock();
@@ -1461,10 +1739,13 @@ mod tests {
     #[test]
     fn test_ora() {
         let mut m = Machine::new();
-        m.load(&[
-            // ORA $AB12
-            0x0D, 0x12, 0xAB,
-        ]);
+        m.load(
+            &[
+                // ORA $AB12
+                0x0D, 0x12, 0xAB,
+            ],
+            0,
+        );
         m.cpu.a = 0x03;
         m.cpu.write(0xab12, 0x05);
         m.cpu.clock();
@@ -1491,10 +1772,13 @@ mod tests {
         m.reset();
         m.cpu.sp = 0xFE;
         m.write(0x01FF, 0xAB);
-        m.load(&[
-            // PLA
-            0x68,
-        ]);
+        m.load(
+            &[
+                // PLA
+                0x68,
+            ],
+            0,
+        );
 
         m.cpu.clock();
         assert_eq!(m.cpu.a, 0xAB);
@@ -1523,10 +1807,13 @@ mod tests {
         m.reset();
         m.cpu.sp = 0xFF;
         m.cpu.a = 0xAB;
-        m.load(&[
-            // PHA
-            0x48,
-        ]);
+        m.load(
+            &[
+                // PHA
+                0x48,
+            ],
+            0,
+        );
 
         m.cpu.clock();
         assert_eq!(m.read(0x01FF), 0xAB);
@@ -1539,10 +1826,13 @@ mod tests {
 
         m.reset();
         m.cpu.a = 0xAB;
-        m.load(&[
-            // TAX
-            0xAA,
-        ]);
+        m.load(
+            &[
+                // TAX
+                0xAA,
+            ],
+            0,
+        );
 
         m.cpu.clock();
         assert_eq!(m.cpu.x, 0xAB);

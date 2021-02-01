@@ -1,4 +1,5 @@
 use crate::io::IO;
+use std::iter::FromIterator;
 
 /// Display from Easy6502
 /// 32x32 pixels
@@ -15,6 +16,14 @@ impl Display {
         Display {
             buffer: [0; 32 * 32],
         }
+    }
+
+    pub fn flush(&mut self) {
+        print!(
+            "{}",
+            String::from_iter(self.buffer.iter().map(|c| *c as char))
+        );
+        self.buffer = [0; 32 * 32];
     }
 }
 
