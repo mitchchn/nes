@@ -8,7 +8,7 @@ MULTIPLY LDA  #0
 add_loop:
     BCC  no_add
     CLC
-    ADC  factor2
+    ADC  0x1A2C
 no_add:
     ROR
     ROR  factor1

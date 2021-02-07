@@ -19,10 +19,22 @@ impl Machine {
     }
 
     pub fn run(&mut self) {
+        self.cpu.reset();
+
         while !self.cpu.halted() {
             self.cpu.clock();
         }
         println!("Total cycles: {}", self.cpu.cycles())
+    }
+
+    pub fn debug(&mut self, breakpoints: &[u16]) {
+        self.cpu.reset();
+        while !self.cpu.halted() {
+            self.cpu.clock();
+            if breakpoints.contains(&self.cpu.pc) {
+                break;
+            }
+        }
     }
 
     pub fn reset(&mut self) {
@@ -35,10 +47,10 @@ impl Machine {
         }
 
         // Init reset vector
-        let lo = (start_at & 0x00FF) >> 8;
-        let hi = (start_at & 0xFF00) >> 8 as u8;
-        self.bus.borrow_mut().write(0xFFFC, lo as u8);
-        self.bus.borrow_mut().write(0xFFFD, hi as u8);
+        let lo = (start_at & 0x00FF) as u8;
+        let hi = ((start_at & 0xFF00) >> 8) as u8;
+        self.bus.borrow_mut().write(0xFFFC, lo);
+        self.bus.borrow_mut().write(0xFFFD, hi);
     }
 }
 
@@ -61,7 +73,7 @@ mod tests {
         let mut m = Machine::new();
         let rom = fs::read("src/asm/main.bin").expect("Could not open file");
 
-        m.load(&rom, 0x4000);
+        m.load(&rom, 0x0600);
 
         m.reset();
 

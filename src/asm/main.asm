@@ -1,31 +1,35 @@
     *= $0000
     brk
 
+    *= $00F0
 
-    *= $0050
-
-    factor1     .byte 5
-    factor2     .byte 20
-    SRC         .word $0600
+    factor1     .byte 3
+    factor2     .byte 80
+    SRC         .word $0105
     DST         .word $0200
+
+    *= $0105
+    // .text "leetspeak is for hackers\n"
+    .text "HELLO WORLDS\n"
 
     *= $0600
 
-    .text "HELLO WORLD BROS\n"
-
-    *= $4000
-
 START
-    lda #$1
-    bne MULTIPLY
-    jmp TOLOWER
+    // jsr MULTIPLY
+    // jsr TOLOWER
+    jsr ROT13
+
+    brk
 
 INCLUDES
 
-    *= $4050
-    .include "mul.asm"
+    // *= $0650
+    // .include "mul.asm"
+    *= $0650
+    .include "rot13.asm"
     
-    *= $4075
-    .include "tolower.asm"
+    // *= $0675
+    // .include "tolower.asm"
 
-
+    // *= $0675
+    // .include "toleet.asm"
