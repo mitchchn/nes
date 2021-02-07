@@ -28,12 +28,14 @@ LOOP    LDA (SRC),Y     ;get from source string
 UPPER   ADC #13         
         CMP #'Z'                   
         BMI COPY 
+        CLC
         SBC #25
         JMP COPY
 ;
 LOWER   ADC #13         
         CMP #'z'                   
-        BMI COPY 
+        BMI COPY
+        CLC
         SBC #25
 ;
 COPY    STA (DST),Y     ;store to destination string

@@ -930,7 +930,8 @@ impl CPU6502 {
     fn sbc(&mut self) {
         let acc = self.a;
         // One's complement
-        let op = self.read(self.op_addr) + 1 ^ 0xFF;
+        // Don't add 1 since we're adding the carry bit.
+        let op = self.read(self.op_addr) ^ 0xFF;
 
         self.add_a_(acc, op);
     }
