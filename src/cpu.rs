@@ -1,13 +1,11 @@
-use crate::bus::Bus;
 use crate::io::IO;
-use colored::*;
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-// Status register
 bitflags! {
-    struct Flags: u8 {
+    /// Processor status register
+    pub(crate) struct Status: u8 {
         /// Negative
         const N = 1 << 7;
         /// Overflow
@@ -31,12 +29,12 @@ bitflags! {
 /// It is traversed by the stack pointer (SP).
 /// The 6502 uses a descending stack that grows downward.
 const STACK: u16 = 0x0100;
-const STACK_TOP: u16 = 0x01FF;
 
 /// Each instruction on the 6502 uses one of thirteen
 /// memory addressing modes. These determine how the operand (if any) is looked up.
 ///
-/// References:
+/// ### References
+///
 /// - http://www.obelisk.me.uk/6502/addressing.html
 /// - https://emudev.de/nes-emulator/opcodes-and-addressing-modes-the-6502/
 /// - https://lowendgaming.neocities.org/6502_addressing_modes.htm
@@ -54,7 +52,7 @@ pub enum Mode {
     ACC,
     /// Immediate
     ///
-    /// e.g. `AND #$AA`
+    /// e.g. `LDA #$AA`
     IMM,
     /// Absolute
     ///
@@ -99,64 +97,121 @@ pub enum Mode {
 }
 
 #[derive(Debug, Clone, Copy)]
+/// All 55 opcodes on the 6502 plus `XXX`, which represenst an illegal opcode.
 pub enum Opcode {
+    /// `ADC` - Add with Carry
     ADC,
+    /// `AND` - Logical AND
     AND,
+    /// `ASL` - Arithmetic Shift Left
     ASL,
+    /// `BCC` - Branch if Carry Clear
     BCC,
+    /// `BCS` - Brancy if Carry Set
     BCS,
+    /// `BEQ` - Branch if Equal
     BEQ,
+    /// `BIT` - Check Bits
     BIT,
+    /// `BMI` - Branch if Minus
     BMI,
+    /// `BNE` - Branch if Not Equal
     BNE,
+    /// `BPL` - Branch if Plus
     BPL,
+    /// `BRK` - Break
     BRK,
+    /// `BVC` - Branch if Overflow Clear
     BVC,
+    /// `BVS` - Branch if Overflow Set
     BVS,
+    /// `CLC` - Clear Carry
     CLC,
+    /// `CLD` - Clear Decimal
     CLD,
+    /// `CLI` - Clear Interrupt
     CLI,
+    /// `CLV` - Clear Overflow
     CLV,
+    /// `CMP` - Compare
     CMP,
+    /// `CPX` - Compare X
     CPX,
+    /// `CPY` - Compare Y
     CPY,
+    /// `DEC` - Decrement
     DEC,
+    /// `DEX` - Decrement X
     DEX,
+    /// `DEY` - Decrement Y
     DEY,
+    /// `EOR` - Exclusive OR
     EOR,
+    /// `INC` - Increment
     INC,
+    /// `INX` - Increment X
     INX,
+    /// `INY` - Increment Y
     INY,
+    /// `JMP` - Jump
     JMP,
+    /// `JSR` - Jump to Subroutine
     JSR,
+    /// `LDA` - Load Accumulator
     LDA,
+    /// `LDX` - Load X
     LDX,
+    /// `LDY` - Load Y
     LDY,
+    /// `LSR` - Logical Shift Right
     LSR,
+    /// `NOP` - No Operation
     NOP,
+    /// `ORA` - Logical OR
     ORA,
+    /// `PHA` - Push Accumulator to Stack
     PHA,
+    /// `PHP` - Push Processor Status to Stack
     PHP,
+    /// `PLA` - Pull Accumulator from Stack
     PLA,
+    /// `PHP` - Pull Processor Status from Stack
     PLP,
+    /// `ROL` - Rotate Left
     ROL,
+    /// `ROR` - Rotate Right
     ROR,
+    /// `RTI` - Return from Interrupt
     RTI,
+    /// `RTS` - Return from Subroutine
     RTS,
+    /// `SBC` - Subctract with Carry
     SBC,
+    /// `SEC` - Set Carry
     SEC,
+    /// `SED` - Set Decimal
     SED,
+    /// `SEI` - Set Interrupt
     SEI,
+    /// `STA` - Store Accumulator
     STA,
+    /// `STX` - Store X
     STX,
+    /// `STY` - Store Y
     STY,
+    /// `TAX` - Transfer Accumulator to X
     TAX,
+    /// `TAY` - Transfer Accumulator to Y
     TAY,
+    /// `TSX` - Transfer Stack to X
     TSX,
+    /// `TXA` - Transfer X to Accumulator
     TXA,
+    /// `TXS` - Transfer X to Stack
     TXS,
+    /// `TYA` - Transfer Y to Accumulator
     TYA,
-    // Illegal
+    /// `XXX` - Illegal Opcode
     XXX,
 }
 
@@ -422,42 +477,42 @@ const INSTRUCTIONS: [Instruction; 256] = [
 ];
 
 pub struct CPU6502 {
-    bus: Rc<RefCell<Bus>>,
+    mem: Rc<RefCell<dyn IO>>,
 
-    // Program counter
+    /// Program counter
     pub(crate) pc: u16,
-    // Accmulator
-    a: u8,
-    // X index
-    x: u8,
-    // Y index
-    y: u8,
-    // Stack pointer
-    sp: u8,
-    // Status flags
-    status: Flags,
+    /// Accmulator
+    pub(crate) a: u8,
+    /// X index
+    pub(crate) x: u8,
+    /// Y index
+    pub(crate) y: u8,
+    /// Stack pointer
+    pub(crate) sp: u8,
+    /// Processor status
+    pub(crate) p: Status,
 
     // Total cycle count
-    cycles: u64,
+    pub(crate) cycles: u64,
 
     // Current instruction
-    opcode: Opcode,
-    op_addr: u16,
-    cycles_left: u8,
+    pub(crate) instruction: Instruction,
+    pub(crate) op_addr: u16,
+    pub(crate) cycles_left: u8,
 }
 
 impl CPU6502 {
-    pub fn new(bus: Rc<RefCell<Bus>>) -> Self {
+    pub fn new(mem: Rc<RefCell<dyn IO>>) -> Self {
         let cpu = CPU6502 {
-            bus,
+            mem,
             pc: 0,
             a: 0,
             x: 0,
             y: 0,
             sp: 0,
-            status: Flags::empty(),
+            p: Status::empty(),
             cycles: 0,
-            opcode: Opcode::BRK,
+            instruction: INSTRUCTIONS[0],
             op_addr: 0,
             cycles_left: 0,
         };
@@ -469,31 +524,30 @@ impl CPU6502 {
     pub fn reset(&mut self) {
         // Get the starting program counter address.
         // This is stored at a predetermined location, 0xFFFC.
-        //
         let pc_lo = self.read(0xFFFC) as u16;
         let pc_hi = self.read(0xFFFD) as u16;
         let pc = (pc_hi << 8) | pc_lo;
 
-        // Stack poiner counts *down* so starts at 0XFF (255).
+        // Stack poiner counts *down* so start at 0XFF (255).
         let sp = 0xFF;
 
-        // Switch off status flags except for U (Unused) which is always on.
-        let status = Flags::empty() | Flags::U;
+        // Switch off status Status except for U (Unused) which is always on.
+        let status = Status::empty() | Status::U;
 
         self.pc = pc;
         self.a = 0;
         self.x = 0;
         self.y = 0;
         self.sp = sp;
-        self.status = status;
+        self.p = status;
 
-        self.opcode = Opcode::BRK;
+        self.instruction = INSTRUCTIONS[0];
         self.op_addr = 0;
         self.cycles_left = 0;
     }
 
     pub fn execute(&mut self, (opcode, mode, cycles, op): Instruction) {
-        self.opcode = opcode;
+        self.instruction = (opcode, mode, cycles, op);
 
         match mode {
             Mode::ABS => self.abs(),
@@ -512,26 +566,6 @@ impl CPU6502 {
 
         self.cycles_left = cycles;
 
-        println!(
-            "{:#?} {}",
-            opcode,
-            match mode {
-                Mode::IMP => "".to_string(),
-                Mode::IMM => format!("#${:02X}", self.read(self.op_addr)),
-                Mode::ACC => "A".to_string(),
-                Mode::ABS => format!("${:04X}", self.op_addr),
-                Mode::ABX => format!("${:04X},X", self.op_addr),
-                Mode::ABY => format!("${:04X},Y", self.op_addr),
-                Mode::ZPG => format!("${:02X}", self.op_addr),
-                Mode::ZPX => format!("${:02X},X", self.op_addr),
-                Mode::ZPY => format!("${:02X},Y", self.op_addr),
-                Mode::ZIX => format!("(${:02X},X)", self.op_addr),
-                Mode::ZIY => format!("(${:02X},Y)", self.op_addr),
-                Mode::IND => format!("(${:04X})", self.op_addr),
-                Mode::REL => format!("${:04X}", self.op_addr),
-            }
-        );
-
         op(self);
     }
 
@@ -543,7 +577,6 @@ impl CPU6502 {
 
             self.cycles_left = instruction.2;
             self.execute(instruction);
-            self.print_state();
         }
 
         self.cycles += 1;
@@ -555,49 +588,7 @@ impl CPU6502 {
     }
 
     pub fn halted(&self) -> bool {
-        self.status.contains(Flags::B)
-    }
-
-    pub fn print_state(&self) {
-        let color_flag = |f: u8| {
-            if f == 1 {
-                f.to_string().green()
-            } else {
-                ColoredString::from(f.to_string().as_str())
-            }
-        };
-
-        let f: [u8; 8] = [
-            if self.status.contains(Flags::N) { 1 } else { 0 },
-            if self.status.contains(Flags::V) { 1 } else { 0 },
-            if self.status.contains(Flags::U) { 1 } else { 0 },
-            if self.status.contains(Flags::B) { 1 } else { 0 },
-            if self.status.contains(Flags::D) { 1 } else { 0 },
-            if self.status.contains(Flags::I) { 1 } else { 0 },
-            if self.status.contains(Flags::Z) { 1 } else { 0 },
-            if self.status.contains(Flags::C) { 1 } else { 0 },
-        ];
-
-        println!(
-            "{}",
-            "PC    A  X  Y    SP    N V - B D I Z C".white().on_blue(),
-        );
-        println!(
-            "{:04X}  {:02X} {:02X} {:02X}   {:02X}    {} {} {} {} {} {} {} {}\n",
-            self.pc,
-            self.a,
-            self.x,
-            self.y,
-            self.sp,
-            color_flag(f[0]),
-            color_flag(f[1]),
-            color_flag(f[2]),
-            color_flag(f[3]),
-            color_flag(f[4]),
-            color_flag(f[5]),
-            color_flag(f[6]),
-            color_flag(f[7])
-        );
+        self.p.contains(Status::B)
     }
 
     // Addresing Modes
@@ -753,7 +744,12 @@ impl CPU6502 {
     /// XXX - Illegal Instruction
     ///
     fn xxx(&mut self) {
-        dbg!("XXX - Illegal Instruction:", self.opcode);
+        dbg!(
+            "XXX - Illegal Instruction: ({}, {}, {})",
+            self.instruction.0,
+            self.instruction.1,
+            self.instruction.2
+        );
     }
 
     /// ADC - Add with Carry
@@ -770,7 +766,7 @@ impl CPU6502 {
     fn and(&mut self) {
         let byte = self.read(self.op_addr);
         self.a &= byte;
-        self.set_arithmetic_flags(self.a);
+        self.set_arithmetic_status(self.a);
     }
 
     /// ASL - Arithmetic Shift Left
@@ -781,7 +777,7 @@ impl CPU6502 {
         let asl_value = self.asl_(byte);
         self.write(self.op_addr, asl_value);
 
-        self.set_arithmetic_flags(asl_value);
+        self.set_arithmetic_status(asl_value);
     }
 
     fn asl_a(&mut self) {
@@ -790,7 +786,7 @@ impl CPU6502 {
         let asl_value = self.asl_(acc);
         self.a = asl_value;
 
-        self.set_arithmetic_flags(asl_value);
+        self.set_arithmetic_status(asl_value);
     }
 
     #[inline]
@@ -799,9 +795,9 @@ impl CPU6502 {
         let asl_value = value << 1;
 
         // Place old bit 7 in the carry flag
-        // self.status.set(Flags::C, asl_value & 0xf0 != value & 0xf0);
+        // self.status.set(Status::C, asl_value & 0xf0 != value & 0xf0);
         let seven_bit = value & (1 << 7);
-        self.status.set(Flags::C, seven_bit != 0);
+        self.p.set(Status::C, seven_bit != 0);
 
         asl_value
     }
@@ -812,7 +808,7 @@ impl CPU6502 {
         let m = self.read(self.op_addr);
         self.a = self.a ^ m;
 
-        self.set_arithmetic_flags(self.a);
+        self.set_arithmetic_status(self.a);
     }
 
     /// LSR - Logical Shift Right
@@ -823,7 +819,7 @@ impl CPU6502 {
         let lsr_value = self.lsr_(byte);
         self.write(self.op_addr, lsr_value);
 
-        self.set_arithmetic_flags(lsr_value);
+        self.set_arithmetic_status(lsr_value);
     }
 
     fn lsr_a(&mut self) {
@@ -832,12 +828,12 @@ impl CPU6502 {
         let lsr_value = self.lsr_(acc);
         self.a = lsr_value;
 
-        self.set_arithmetic_flags(lsr_value);
+        self.set_arithmetic_status(lsr_value);
     }
 
     fn lsr_(&mut self, value: u8) -> u8 {
         let zero_bit = value & (1 << 0);
-        self.status.set(Flags::C, zero_bit != 0);
+        self.p.set(Status::C, zero_bit != 0);
         value >> 1
     }
 
@@ -849,7 +845,7 @@ impl CPU6502 {
         let rol_value = self.rol_(byte);
         self.write(self.op_addr, rol_value);
 
-        self.set_arithmetic_flags(rol_value);
+        self.set_arithmetic_status(rol_value);
     }
 
     fn rol_a(&mut self) {
@@ -858,11 +854,11 @@ impl CPU6502 {
         let rol_value = self.rol_(acc);
         self.a = rol_value;
 
-        self.set_arithmetic_flags(self.a);
+        self.set_arithmetic_status(self.a);
     }
 
     fn rol_(&mut self, value: u8) -> u8 {
-        let carry_bit = (self.status & Flags::C).bits();
+        let carry_bit = (self.p & Status::C).bits();
 
         // Shift left and change bit 0 to value of old carry bit.
         let mut rol_value = value << 1;
@@ -874,9 +870,9 @@ impl CPU6502 {
 
         // Set carry flag to old bit 7
         let seven_bit = value & (1 << 7);
-        self.status.set(Flags::C, seven_bit != 0);
+        self.p.set(Status::C, seven_bit != 0);
 
-        self.status.set(Flags::C, seven_bit != 0);
+        self.p.set(Status::C, seven_bit != 0);
         rol_value
     }
 
@@ -888,7 +884,7 @@ impl CPU6502 {
         let ror_value = self.ror_(byte);
         self.write(self.op_addr, ror_value);
 
-        self.set_arithmetic_flags(byte);
+        self.set_arithmetic_status(byte);
     }
 
     fn ror_a(&mut self) {
@@ -897,11 +893,11 @@ impl CPU6502 {
         let ror_value = self.ror_(acc);
         self.a = ror_value;
 
-        self.set_arithmetic_flags(self.a);
+        self.set_arithmetic_status(self.a);
     }
 
     fn ror_(&mut self, value: u8) -> u8 {
-        let carry_bit = (self.status & Flags::C).bits();
+        let carry_bit = (self.p & Status::C).bits();
 
         // Shift right and set bit 7 to contents of old carry bit.
         let mut ror_value = value >> 1;
@@ -913,7 +909,7 @@ impl CPU6502 {
 
         // Set carry flag to old bit 0
         let zero_bit = value & (1 << 0);
-        self.status.set(Flags::C, zero_bit != 0);
+        self.p.set(Status::C, zero_bit != 0);
 
         ror_value
     }
@@ -921,7 +917,7 @@ impl CPU6502 {
     /// BRK - Break
     ///
     fn brk(&mut self) {
-        self.status.set(Flags::B, true);
+        self.p.set(Status::B, true);
         self.irq();
     }
 
@@ -937,7 +933,7 @@ impl CPU6502 {
     }
 
     fn add_a_(&mut self, acc: u8, val: u8) {
-        let carry_bit = (self.status & Flags::C).bits();
+        let carry_bit = (self.p & Status::C).bits();
         let result = acc.wrapping_add(val).wrapping_add(carry_bit);
         self.a = result;
 
@@ -945,23 +941,23 @@ impl CPU6502 {
         //
         // Carry if MSB flipped.
         // This could _either_ indicate a change of sign or an overflow.
-        self.status.set(Flags::C, result < acc);
+        self.p.set(Status::C, result < acc);
 
         // Set Overflow flag
         //
         // Indicate overflow to negate the N flag when
         // adding two values with the same sign (P + P or N + N).
-        self.status.set(
-            Flags::V,
+        self.p.set(
+            Status::V,
             result & 0x80 != acc & 0x80 && result & 0x80 != val & 0x80,
         );
 
-        self.set_arithmetic_flags(self.a);
+        self.set_arithmetic_status(self.a);
     }
 
     /// BCC - Branch if Carry Clear
     fn bcc(&mut self) {
-        if !self.status.contains(Flags::C) {
+        if !self.p.contains(Status::C) {
             self.cycles_left += 1;
             self.branch_();
         }
@@ -969,7 +965,7 @@ impl CPU6502 {
 
     /// BCS - Branch if Carry Set
     fn bcs(&mut self) {
-        if self.status.contains(Flags::C) {
+        if self.p.contains(Status::C) {
             self.cycles_left += 1;
             self.branch_();
         }
@@ -977,7 +973,7 @@ impl CPU6502 {
 
     /// BEQ - Branch if Equal
     fn beq(&mut self) {
-        if self.status.contains(Flags::Z) {
+        if self.p.contains(Status::Z) {
             self.cycles_left += 1;
             self.branch_();
         }
@@ -985,7 +981,7 @@ impl CPU6502 {
 
     /// BMI - Branch on Result Minus
     fn bmi(&mut self) {
-        if self.status.contains(Flags::N) {
+        if self.p.contains(Status::N) {
             self.cycles_left += 1;
             self.branch_()
         }
@@ -993,7 +989,7 @@ impl CPU6502 {
 
     /// BNE - Branch Not Equal
     fn bne(&mut self) {
-        if !self.status.contains(Flags::Z) {
+        if !self.p.contains(Status::Z) {
             self.cycles_left += 1;
             self.branch_();
         }
@@ -1001,7 +997,7 @@ impl CPU6502 {
 
     /// BPL - Branch if Positive
     fn bpl(&mut self) {
-        if !self.status.contains(Flags::N) {
+        if !self.p.contains(Status::N) {
             self.cycles_left += 1;
             self.branch_();
         }
@@ -1009,7 +1005,7 @@ impl CPU6502 {
 
     /// BVC - Branch if Overflow Clear
     fn bvc(&mut self) {
-        if !self.status.contains(Flags::V) {
+        if !self.p.contains(Status::V) {
             self.cycles_left += 1;
             self.branch_();
         }
@@ -1017,7 +1013,7 @@ impl CPU6502 {
 
     /// BVS - Branch if Overflow Set
     fn bvs(&mut self) {
-        if self.status.contains(Flags::V) {
+        if self.p.contains(Status::V) {
             self.cycles_left += 1;
             self.branch_();
         }
@@ -1035,22 +1031,22 @@ impl CPU6502 {
 
     /// CLC - Clear Carry
     fn clc(&mut self) {
-        self.status.set(Flags::C, false);
+        self.p.set(Status::C, false);
     }
 
     /// CLD - Clear Decimal
     fn cld(&mut self) {
-        self.status.set(Flags::D, false);
+        self.p.set(Status::D, false);
     }
 
     /// CLI - Clear Interrupt Disable
     fn cli(&mut self) {
-        self.status.set(Flags::I, false);
+        self.p.set(Status::I, false);
     }
 
     /// CLV - Clear Overflow
     fn clv(&mut self) {
-        self.status.set(Flags::V, false);
+        self.p.set(Status::V, false);
     }
 
     /// DEC - Decrement
@@ -1059,21 +1055,21 @@ impl CPU6502 {
         let val = self.read(self.op_addr).wrapping_sub(1);
 
         self.write(self.op_addr, val);
-        self.set_arithmetic_flags(val);
+        self.set_arithmetic_status(val);
     }
 
     /// DEX - Decrement X
     ///
     fn dex(&mut self) {
         self.x = self.x.wrapping_sub(1);
-        self.set_arithmetic_flags(self.x);
+        self.set_arithmetic_status(self.x);
     }
 
     /// DEY - Decrement Y
     ///
     fn dey(&mut self) {
         self.y = self.y.wrapping_sub(1);
-        self.set_arithmetic_flags(self.y);
+        self.set_arithmetic_status(self.y);
     }
 
     /// INC - Increment
@@ -1082,33 +1078,33 @@ impl CPU6502 {
         let m = self.read(self.op_addr);
         let result = m + 1;
         self.write(self.op_addr, result);
-        self.set_arithmetic_flags(result);
+        self.set_arithmetic_status(result);
     }
 
     /// INX - Increment X
     ///
     fn inx(&mut self) {
         self.x = self.x.wrapping_add(1);
-        self.set_arithmetic_flags(self.x);
+        self.set_arithmetic_status(self.x);
     }
 
     /// INY - Increment Y
     ///
     fn iny(&mut self) {
         self.y = self.y.wrapping_add(1);
-        self.set_arithmetic_flags(self.y);
+        self.set_arithmetic_status(self.y);
     }
 
     // BIT - Test bits
     //
     fn bit(&mut self) {
         let byte = self.read(self.op_addr);
-        self.status.set(Flags::Z, (self.a & byte) == 0);
+        self.p.set(Status::Z, (self.a & byte) == 0);
 
-        self.status.set(Flags::V, byte >> 6 & 1 != 0);
-        self.status.set(Flags::N, byte >> 7 & 1 != 0);
+        self.p.set(Status::V, byte >> 6 & 1 != 0);
+        self.p.set(Status::N, byte >> 7 & 1 != 0);
 
-        // self.status.set(Flags::N,)
+        // self.status.set(Status::N,)
     }
 
     /// CMP - Compare Accumulator
@@ -1120,7 +1116,7 @@ impl CPU6502 {
     /// CPX - Compare X
     /// X-M -> Z,C,N
     fn cpx(&mut self) {
-        self.cmp_(self.y);
+        self.cmp_(self.x);
     }
 
     /// CPY - Compare Y
@@ -1133,10 +1129,9 @@ impl CPU6502 {
     fn cmp_(&mut self, value: u8) {
         let m = self.read(self.op_addr);
 
-        self.status.set(Flags::Z, value == m);
-        self.status.set(Flags::C, value >= m);
-        self.status
-            .set(Flags::N, value.wrapping_sub(m) & (1 << 7) != 0);
+        self.p.set(Status::Z, value == m);
+        self.p.set(Status::C, value >= m);
+        self.p.set(Status::N, value.wrapping_sub(m) & (1 << 7) != 0);
     }
 
     /// JMP - Jump
@@ -1159,11 +1154,12 @@ impl CPU6502 {
         self.pc = self.op_addr;
     }
 
-    /// RTS - Return from Interrupt
+    /// RTI - Return from Interrupt
     ///
     fn rti(&mut self) {
         let status = self.pop_stack();
-        self.status = Flags::from_bits(status).expect("Could not restore status");
+        self.p =
+            Status::from_bits(status).expect("Could not restore status") & !Status::B | Status::U;
 
         let pc_lo = self.pop_stack() as u16;
         let pc_hi = self.pop_stack() as u16;
@@ -1188,7 +1184,7 @@ impl CPU6502 {
     /// http://www.thealmightyguru.com/Games/Hacking/Wiki/index.php?title=LDA
     fn lda(&mut self) {
         self.a = self.read(self.op_addr);
-        self.set_arithmetic_flags(self.a);
+        self.set_arithmetic_status(self.a);
     }
 
     /// LDX - Load X With Memory
@@ -1196,7 +1192,7 @@ impl CPU6502 {
     /// http://www.thealmightyguru.com/Games/Hacking/Wiki/index.php?title=LDA
     fn ldx(&mut self) {
         self.x = self.read(self.op_addr);
-        self.set_arithmetic_flags(self.x);
+        self.set_arithmetic_status(self.x);
     }
 
     /// LDY - Load Y With Memory
@@ -1204,7 +1200,7 @@ impl CPU6502 {
     /// http://www.thealmightyguru.com/Games/Hacking/Wiki/index.php?title=LDA
     fn ldy(&mut self) {
         self.y = self.read(self.op_addr);
-        self.set_arithmetic_flags(self.y);
+        self.set_arithmetic_status(self.y);
     }
 
     /// NOP - No Operation
@@ -1215,7 +1211,7 @@ impl CPU6502 {
     ///
     fn ora(&mut self) {
         self.a |= self.read(self.op_addr);
-        self.set_arithmetic_flags(self.a);
+        self.set_arithmetic_status(self.a);
     }
 
     /// PHA - Push Accumulator to Stack
@@ -1227,42 +1223,43 @@ impl CPU6502 {
     /// PHP - Push Processor Status
     ///
     fn php(&mut self) {
-        self.push_stack(self.status.bits());
+        self.push_stack(self.p.bits());
     }
 
     /// PLA - Pull Accumulator from Stack
     ///
     fn pla(&mut self) {
         self.a = self.pop_stack();
-        self.set_arithmetic_flags(self.a);
+        self.set_arithmetic_status(self.a);
     }
 
-    /// PHP - Pull Processor Status
+    /// PLP - Pull Processor Status
     ///
     fn plp(&mut self) {
-        self.status =
-            Flags::from_bits(self.pop_stack()).expect("Could not restore status register");
+        self.p = Status::from_bits(self.pop_stack()).expect("Could not restore status register")
+            & !(Status::B)
+            | Status::U;
     }
 
     /// SEC - Set Carry
     /// 1 -> C
     ///
     pub fn sec(&mut self) {
-        self.status.set(Flags::C, true);
+        self.p.set(Status::C, true);
     }
 
     /// SED - Set Decimal
     /// 1 -> D
     ///
     pub fn sed(&mut self) {
-        self.status.set(Flags::D, true);
+        self.p.set(Status::D, true);
     }
 
     /// SEI - Set Interrupt Disable
     /// 1 -> I
     ///
     pub fn sei(&mut self) {
-        self.status.set(Flags::I, true);
+        self.p.set(Status::I, true);
     }
 
     /// STA - Store Accumulator
@@ -1288,42 +1285,42 @@ impl CPU6502 {
     ///
     fn tax(&mut self) {
         self.x = self.a;
-        self.set_arithmetic_flags(self.x);
+        self.set_arithmetic_status(self.x);
     }
 
     /// TAY - Transfer Accumulator to Y
     ///
     fn tay(&mut self) {
         self.y = self.a;
-        self.set_arithmetic_flags(self.y);
+        self.set_arithmetic_status(self.y);
     }
 
     /// TSX - Transfer Stack Pointer to X
     /// SP -> X
     fn tsx(&mut self) {
         self.x = self.sp;
-        self.set_arithmetic_flags(self.x);
+        self.set_arithmetic_status(self.x);
     }
 
     /// TXA - Transfer X to Accumulator
     /// X -> A
     fn txa(&mut self) {
         self.a = self.x;
-        self.set_arithmetic_flags(self.a);
+        self.set_arithmetic_status(self.a);
     }
 
     /// TXS - Transfer X to Stack Pointer
     /// X -> SP
     fn txs(&mut self) {
         self.sp = self.x;
-        self.set_arithmetic_flags(self.sp);
+        self.set_arithmetic_status(self.sp);
     }
 
     /// TXA - Transfer Y to Accumulator
     /// Y -> A
     fn tya(&mut self) {
         self.a = self.y;
-        self.set_arithmetic_flags(self.a);
+        self.set_arithmetic_status(self.a);
     }
 
     //
@@ -1340,7 +1337,7 @@ impl CPU6502 {
 
     /// IRQ - Interrupt
     fn irq(&mut self) {
-        if !self.status.contains(Flags::I) {
+        if !self.p.contains(Status::I) {
             self.interrupt_(0xFFFE);
             self.cycles_left = 7;
         }
@@ -1356,7 +1353,7 @@ impl CPU6502 {
         self.push_stack(pc_lo);
 
         // Push status register onto the stack (with clear B flag)
-        self.push_stack((self.status & !Flags::B).bits());
+        self.push_stack((self.p & !Status::B).bits());
 
         // Set PC to address from vector
         let addr_lo = self.read(vector_addr) as u16;
@@ -1364,7 +1361,7 @@ impl CPU6502 {
         let addr = (addr_hi << 8) | addr_lo;
 
         // Set I flag
-        self.status.set(Flags::I, true);
+        self.p.set(Status::I, true);
 
         self.pc = addr;
     }
@@ -1375,14 +1372,14 @@ impl CPU6502 {
     }
 
     #[inline]
-    fn set_arithmetic_flags(&mut self, val: u8) {
+    fn set_arithmetic_status(&mut self, val: u8) {
         // Negative flag
         // 0x00 - 0x7F is positive
         // 0x80 -0xFF is negative
-        self.status.set(Flags::N, (val & 0x80) != 0);
+        self.p.set(Status::N, (val & 0x80) != 0);
 
         // Zero flag
-        self.status.set(Flags::Z, val == 0);
+        self.p.set(Status::Z, val == 0);
     }
 
     /// Read a word (e.g. an address) from the bus.
@@ -1423,11 +1420,11 @@ impl CPU6502 {
 }
 
 impl IO for CPU6502 {
-    fn read(&self, addr: u16) -> u8 {
-        self.bus.borrow().read(addr)
+    fn read(&mut self, addr: u16) -> u8 {
+        self.mem.borrow_mut().read(addr)
     }
     fn write(&mut self, addr: u16, data: u8) {
-        self.bus.borrow_mut().write(addr, data)
+        self.mem.borrow_mut().write(addr, data)
     }
 }
 
@@ -1435,612 +1432,534 @@ impl IO for CPU6502 {
 mod tests {
     use super::*;
 
-    use crate::machine::Machine;
+    use crate::mem::Memory;
 
-    fn create_cpu() -> CPU6502 {
-        CPU6502::new(Rc::new(RefCell::new(Bus::new())))
+    fn create_test_cpu(mem: &[u8]) -> CPU6502 {
+        let mut m = Memory::new();
+        m.load(mem, 0);
+        CPU6502::new(Rc::new(RefCell::new(m)))
     }
 
     #[test]
     fn test_reset() {
-        let mut m = Machine::new();
-        m.reset();
+        let mut c = create_test_cpu(&[]);
+        c.reset();
 
         // Set initial program counter
-        m.write(0xFFFC, 0x34);
-        m.write(0xFFFC + 1, 0x12);
+        c.write(0xFFFC, 0x34);
+        c.write(0xFFFC + 1, 0x12);
 
-        assert_eq!(m.bus.borrow().mem[0xFFFC], 0x34);
+        assert_eq!(c.mem.borrow_mut().read(0xFFFC), 0x34);
 
-        m.reset();
+        c.reset();
 
-        assert_eq!(m.cpu.status, Flags::U);
-        assert_eq!(m.cpu.pc, 0x1234);
+        assert_eq!(c.p, Status::U);
+        assert_eq!(c.pc, 0x1234);
     }
 
-    #[test]
-    fn test_imm() {
-        let mut cpu = create_cpu();
-        cpu.write(0x0000, 0x05);
-        cpu.imm();
-        assert_eq!(cpu.read(cpu.op_addr), 0x05);
-    }
+    // #[test]
+    // fn test_imm() {
+    //     let mut cpu = create_cpu();
+    //     cpu.write(0x0000, 0x05);
+    //     cpu.imm();
+    //     assert_eq!(cpu.read(cpu.op_addr), 0x05);
+    // }
 
     #[test]
     fn test_jmp_ind() {
-        let mut m = Machine::new();
-        m.reset();
+        let mut c = create_test_cpu(&[
+            // JMP ($0120)
+            0x6C, 0x20, 0x01,
+        ]);
+        c.reset();
 
         // Address to jump to
-        m.write(0x0120, 0xFC);
-        m.write(0x0121, 0xBA);
+        c.write(0x0120, 0xFC);
+        c.write(0x0121, 0xBA);
 
-        Machine::write(&mut m, 0x0120, 0xFC);
+        c.write(0x0120, 0xFC);
 
-        m.load(
-            &[
-                // JMP ($0120)
-                0x6C, 0x20, 0x01,
-            ],
-            0x0000,
-        );
+        c.clock();
 
-        m.cpu.clock();
-
-        assert_eq!(m.cpu.pc, 0xBAFC);
+        assert_eq!(c.pc, 0xBAFC);
     }
 
     #[test]
     fn test_jmp_abs() {
-        let mut m = Machine::new();
-        m.reset();
+        let mut c = create_test_cpu(&[
+            // JMP $0120
+            0x4C, 0x20, 0x01,
+        ]);
+        c.reset();
 
-        m.load(
-            &[
-                // JMP $0120
-                0x4C, 0x20, 0x01,
-            ],
-            0x0000,
-        );
+        c.clock();
 
-        m.cpu.clock();
-
-        assert_eq!(m.cpu.pc, 0x0120);
+        assert_eq!(c.pc, 0x0120);
     }
 
     #[test]
     fn test_lda_imm() {
-        let mut m = Machine::new();
-        m.reset();
+        let mut c = create_test_cpu(&[
+            // LDA #51
+            0xA9, 0x33,
+        ]);
+        c.reset();
 
-        m.load(
-            &[
-                // LDA #51
-                0xA9, 0x33,
-            ],
-            0x0000,
-        );
+        c.clock();
 
-        m.cpu.clock();
-
-        assert_eq!(m.cpu.a, 0x33);
+        assert_eq!(c.a, 0x33);
     }
 
     #[test]
     fn test_lda_abs() {
-        let mut m = Machine::new();
-        m.reset();
+        let mut c = create_test_cpu(&[
+            // LDA $80FC
+            0xAD, 0xFC, 0x80,
+        ]);
+        c.reset();
 
         // Target value
-        m.write(0x80FC, 0x2B);
+        c.write(0x80FC, 0x2B);
 
-        m.load(
-            &[
-                // LDA $80FC
-                0xAD, 0xFC, 0x80,
-            ],
-            0,
-        );
+        c.clock();
 
-        m.cpu.clock();
-
-        assert_eq!(m.cpu.a, 0x2B);
+        assert_eq!(c.a, 0x2B);
     }
 
     #[test]
     fn test_sta_abs() {
-        let mut m = Machine::new();
-        m.reset();
-        m.cpu.a = 0x33;
+        let mut c = create_test_cpu(&[
+            // STA $0xAB
+            0x8D, 0xAB,
+        ]);
+        c.reset();
+        c.a = 0x33;
 
-        m.load(
-            &[
-                // STA $0xAB
-                0x8D, 0xAB,
-            ],
-            0,
-        );
+        c.clock();
 
-        m.cpu.clock();
-
-        assert_eq!(m.bus.borrow_mut().read(0xAB), 0x33);
+        assert_eq!(c.mem.borrow_mut().read(0xAB), 0x33);
     }
 
     #[test]
     fn test_rel_pos() {
-        let mut m = Machine::new();
-        m.reset();
+        let mut c = create_test_cpu(&[]);
+        c.reset();
 
-        m.write(0x2000, 0x05);
-        m.cpu.pc = 0x2000;
-        m.cpu.rel();
-        assert_eq!(m.cpu.op_addr, 0x2006);
+        c.write(0x2000, 0x05);
+        c.pc = 0x2000;
+        c.rel();
+        assert_eq!(c.op_addr, 0x2006);
     }
 
     #[test]
     fn test_rel_neg() {
-        let mut m = Machine::new();
-        m.reset();
+        let mut c = create_test_cpu(&[]);
+        c.reset();
 
-        m.write(0x2000, 0x85);
-        m.cpu.pc = 0x2000;
-        m.cpu.rel();
-        assert_eq!(m.cpu.op_addr, 0x1F86);
+        c.write(0x2000, 0x85);
+        c.pc = 0x2000;
+        c.rel();
+        assert_eq!(c.op_addr, 0x1F86);
     }
 
     #[test]
     fn test_zix() {
-        let mut m = Machine::new();
-        m.reset();
-        m.cpu.x = 0x04;
-        m.write(0x0000, 0x20);
-        m.write(0x0024, 0x74);
-        m.write(0x0025, 0x20);
-        m.cpu.zix();
-        assert_eq!(m.cpu.op_addr, 0x2074);
+        let mut c = create_test_cpu(&[]);
+        c.reset();
+        c.x = 0x04;
+        c.write(0x0000, 0x20);
+        c.write(0x0024, 0x74);
+        c.write(0x0025, 0x20);
+        c.zix();
+        assert_eq!(c.op_addr, 0x2074);
     }
 
     #[test]
     fn test_ziy() {
-        let mut m = Machine::new();
-        m.reset();
-        m.cpu.y = 0x04;
-        m.write(0x0000, 0x20);
-        m.write(0x0020, 0x74);
-        m.write(0x0021, 0x20);
-        m.cpu.ziy();
-        assert_eq!(m.cpu.op_addr, 0x2078);
+        let mut c = create_test_cpu(&[]);
+        c.reset();
+        c.y = 0x04;
+        c.write(0x0000, 0x20);
+        c.write(0x0020, 0x74);
+        c.write(0x0021, 0x20);
+        c.ziy();
+        assert_eq!(c.op_addr, 0x2078);
     }
 
     #[test]
     fn test_zpx() {
-        let mut m = Machine::new();
+        let mut c = create_test_cpu(&[]);
         // Test typical
-        m.reset();
-        m.cpu.x = 0x0F;
-        m.write(0x0000, 0x80);
-        m.cpu.zpx();
-        assert_eq!(m.cpu.op_addr, 0x008F);
+        c.reset();
+        c.x = 0x0F;
+        c.write(0x0000, 0x80);
+        c.zpx();
+        assert_eq!(c.op_addr, 0x008F);
 
         // Test w/wrap-around in lo bit
-        m.reset();
-        m.cpu.x = 0xFF;
-        m.write(0x0000, 0x80);
-        m.cpu.zpx();
-        assert_eq!(m.cpu.op_addr, 0x007F);
+        c.reset();
+        c.x = 0xFF;
+        c.write(0x0000, 0x80);
+        c.zpx();
+        assert_eq!(c.op_addr, 0x007F);
     }
 
     #[test]
     fn test_asl() {
-        let mut m = Machine::new();
+        let mut c = create_test_cpu(&[
+            // ASL A
+            0x0A,
+        ]);
 
-        // let mut cpu = CPU6502::new(Rc::new(RefCell::new(Bus::new())));
-        m.load(
-            &[
-                // ASL A
-                0x0A,
-            ],
-            0,
-        );
-        m.reset();
+        c.reset();
 
-        m.cpu.a = 2;
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 4);
+        c.a = 2;
+        c.clock();
+        assert_eq!(c.a, 4);
         // cpu.a = 2;
         // cpu.write(0x0, 0x0A);
         // cpu.clock();
         // assert_eq!(cpu.a, 4);
 
         // With carry
-        m.reset();
-        m.cpu.a = 0x90;
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 0x20);
-        assert_eq!(m.cpu.status & Flags::C, Flags::C);
+        c.reset();
+        c.a = 0x90;
+        c.clock();
+        assert_eq!(c.a, 0x20);
+        assert_eq!(c.p & Status::C, Status::C);
     }
 
     #[test]
     fn test_dex() {
-        let mut m = Machine::new();
-        m.load(
-            &[
-                // DEX
-                0xCA,
-            ],
-            0,
-        );
+        let mut c = create_test_cpu(&[
+            // DEX
+            0xCA,
+        ]);
+
         // From positive to positive (5 -> 4)
-        m.reset();
-        m.cpu.x = 0x05;
-        m.cpu.clock();
-        assert_eq!(m.cpu.x, 0x04);
+        c.reset();
+        c.x = 0x05;
+        c.clock();
+        assert_eq!(c.x, 0x04);
         // From positive to zero (1 -> 0)
-        m.cpu.reset();
-        m.cpu.x = 0x01;
-        m.cpu.clock();
-        assert_eq!(m.cpu.x, 0x00);
-        assert_eq!(m.cpu.status & Flags::Z, Flags::Z);
+        c.reset();
+        c.x = 0x01;
+        c.clock();
+        assert_eq!(c.x, 0x00);
+        assert_eq!(c.p & Status::Z, Status::Z);
 
         // From positive to negative (0 -> -1)
-        m.cpu.reset();
-        m.cpu.x = 0x00;
-        m.cpu.clock();
-        assert_eq!(m.cpu.x, 0xFF);
-        assert_eq!(m.cpu.status & Flags::N, Flags::N);
+        c.reset();
+        c.x = 0x00;
+        c.clock();
+        assert_eq!(c.x, 0xFF);
+        assert_eq!(c.p & Status::N, Status::N);
     }
 
     #[test]
     fn test_and() {
-        let mut m = Machine::new();
-        m.load(
-            &[
-                // AND #$0x74
-                0x29, 0x74,
-            ],
-            0,
-        );
+        let mut c = create_test_cpu(&[
+            // AND #$0x74
+            0x29, 0x74,
+        ]);
 
-        m.reset();
-        m.cpu.a = 0x58;
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 0x50);
+        c.reset();
+        c.a = 0x58;
+        c.clock();
+        assert_eq!(c.a, 0x50);
     }
 
     #[test]
     fn test_beq() {
-        let mut m = Machine::new();
-        m.load(
-            &[
-                // BEQ ($0x10)
-                0xF0, 0x10,
-            ],
-            0,
-        );
+        let mut c = create_test_cpu(&[
+            // BEQ ($0x10)
+            0xF0, 0x10,
+        ]);
 
         // Take branch
-        m.reset();
-        m.cpu.status.set(Flags::Z, true);
-        m.cpu.clock();
-        assert_eq!(m.cpu.pc, 0x12);
-        assert_eq!(m.cpu.cycles_left, 2);
+        c.reset();
+        c.p.set(Status::Z, true);
+        c.clock();
+        assert_eq!(c.pc, 0x12);
+        assert_eq!(c.cycles_left, 2);
 
         // Don't take branch
-        m.reset();
-        m.cpu.clock();
-        assert_eq!(m.cpu.pc, 0x02);
-        assert_eq!(m.cpu.cycles_left, 1);
+        c.reset();
+        c.clock();
+        assert_eq!(c.pc, 0x02);
+        assert_eq!(c.cycles_left, 1);
 
         // Pass page boundary
-        m.write(0x00F5, 0xF0);
-        m.write(0x00F6, 0x40);
-        m.reset();
-        m.cpu.pc = 0x00F5;
-        m.cpu.status.set(Flags::Z, true);
-        m.cpu.clock();
-        assert_eq!(m.cpu.pc, 0x0137);
-        // assert_eq!(m.cpu.pc, 0x11);
-        assert_eq!(m.cpu.cycles_left, 3);
+        c.write(0x00F5, 0xF0);
+        c.write(0x00F6, 0x40);
+        c.reset();
+        c.pc = 0x00F5;
+        c.p.set(Status::Z, true);
+        c.clock();
+        assert_eq!(c.pc, 0x0137);
+        // assert_eq!(c.pc, 0x11);
+        assert_eq!(c.cycles_left, 3);
     }
 
     #[test]
     fn test_bmi() {
-        let mut m = Machine::new();
-        m.load(
-            &[
-                // BMI $0x10
-                0x30, 0x10,
-            ],
-            0,
-        );
+        let mut c = create_test_cpu(&[
+            // BMI $0x10
+            0x30, 0x10,
+        ]);
+        c.reset();
+        c.p.set(Status::N, true);
+        c.clock();
+        assert_eq!(c.pc, 0x12);
 
-        m.reset();
-        m.cpu.status.set(Flags::N, true);
-        m.cpu.clock();
-        assert_eq!(m.cpu.pc, 0x12);
-
-        m.reset();
-        m.cpu.status.set(Flags::N, false);
-        m.cpu.clock();
-        assert_eq!(m.cpu.pc, 0x02);
+        c.reset();
+        c.p.set(Status::N, false);
+        c.clock();
+        assert_eq!(c.pc, 0x02);
     }
 
     #[test]
     fn test_adc() {
-        let mut m = Machine::new();
+        let mut c = create_test_cpu(&[
+            // ADC #$05
+            0x69, 0x05,
+        ]);
 
         // P + P = P
         // No carry
         // 9 + 5 = 14
-        m.reset();
-        m.load(
-            &[
-                // ADC #$05
-                0x69, 0x05,
-            ],
-            0,
-        );
-        m.cpu.a = 0x09;
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 0x0E);
-        assert_eq!(m.cpu.status, Flags::U);
+        c.reset();
+        c.a = 0x09;
+        c.clock();
+        assert_eq!(c.a, 0x0E);
+        assert_eq!(c.p, Status::U);
+
+        let mut c = create_test_cpu(&[
+            // ADC #$05
+            0x69, 0x05,
+        ]);
 
         // P + P = P (overflow)
         // No carry
         // 127 + 5 = 132
-        m.reset();
-        m.load(
-            &[
-                // ADC #$05
-                0x69, 0x05,
-            ],
-            0,
-        );
-        m.cpu.a = 0x7F;
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 0x84);
-        assert_eq!(m.cpu.status, Flags::U | Flags::V | Flags::N);
+        c.reset();
+        c.a = 0x7F;
+        c.clock();
+        assert_eq!(c.a, 0x84);
+        assert_eq!(c.p, Status::U | Status::V | Status::N);
 
         // P + N = P
         // Carry
         // 127 - 16 = 111
-        m.reset();
-        m.load(
-            &[
-                // ADC #$F0 % add -16
-                0x69, 0xF0,
-            ],
-            0,
-        );
-        m.cpu.a = 0x7F;
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 0x6F);
-        assert_eq!(m.cpu.status, Flags::U | Flags::C);
+
+        let mut c = create_test_cpu(&[
+            // ADC #$05
+            // ADC #$F0 % add -16
+            0x69, 0xF0,
+        ]);
+
+        c.reset();
+
+        c.a = 0x7F;
+        c.clock();
+        assert_eq!(c.a, 0x6F);
+        assert_eq!(c.p, Status::U | Status::C);
 
         // P + N = N
         // No carry
         // 16 - 32 = -16
-        m.reset();
-        m.load(
-            &[
-                // ADC #$E0 % add -32
-                0x69, 0xE0,
-            ],
-            0,
-        );
-        m.cpu.a = 0x10;
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 0xF0);
-        assert_eq!(m.cpu.status, Flags::N | Flags::U);
+        c.reset();
+
+        let mut c = create_test_cpu(&[
+            // ADC #$E0 % add -32
+            0x69, 0xE0,
+        ]);
+        c.reset();
+
+        c.a = 0x10;
+        c.clock();
+        assert_eq!(c.a, 0xF0);
+        assert_eq!(c.p, Status::N | Status::U);
 
         // N + N = N
         // Carry
-        m.reset();
-        m.load(
-            &[
-                // ADC #$FF % add -1
-                0x69, 0xFF,
-            ],
-            0,
-        );
-        m.cpu.a = 0x90;
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 0x8F);
-        assert_eq!(m.cpu.status, Flags::N | Flags::U | Flags::C);
+
+        let mut c = create_test_cpu(&[
+            // ADC #$FF % add -1
+            0x69, 0xFF,
+        ]);
+
+        c.reset();
+
+        c.a = 0x90;
+        c.clock();
+        assert_eq!(c.a, 0x8F);
+        assert_eq!(c.p, Status::N | Status::U | Status::C);
 
         // N + N = N (overflow)
         // Carry
-        m.reset();
-        m.load(
-            &[
-                // ADC #$A0
-                0x69, 0xA0,
-            ],
-            0,
-        );
-        m.cpu.a = 0x90;
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 0x30);
-        assert_eq!(m.cpu.status, Flags::V | Flags::U | Flags::C);
+        let mut c = create_test_cpu(&[
+            // ADC #$A0
+            0x69, 0xA0,
+        ]);
+
+        c.reset();
+        c.a = 0x90;
+        c.clock();
+        assert_eq!(c.a, 0x30);
+        assert_eq!(c.p, Status::V | Status::U | Status::C);
     }
 
     #[test]
     fn test_sbc() {
-        let mut m = Machine::new();
+        let mut c = create_test_cpu(&[
+            // SBC #$05
+            0xE9, 0x05,
+        ]);
 
         // P - P = P
         // Carry bit not set
         // 9 - 5 = 3 (!!)
-        m.reset();
-        m.load(
-            &[
-                // SBC #$05
-                0xE9, 0x05,
-            ],
-            0,
-        );
-        m.cpu.a = 0x09;
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 0x03);
-        assert_eq!(m.cpu.status, Flags::U | Flags::C);
+        c.reset();
+        c.a = 0x09;
+        c.clock();
+        assert_eq!(c.a, 0x03);
+        assert_eq!(c.p, Status::U | Status::C);
 
         // P - P = P
         // Carry bit set
         // 9 - 5 = 4
-        m.reset();
-        m.load(
-            &[
-                // SBC #$05
-                0xE9, 0x05,
-            ],
-            0,
-        );
-        m.cpu.status.set(Flags::C, true);
-        m.cpu.a = 0x09;
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 0x04);
-        assert_eq!(m.cpu.status, Flags::U | Flags::C);
+        let mut c = create_test_cpu(&[
+            // SBC #$05
+            0xE9, 0x05,
+        ]);
+        c.reset();
+        c.p.set(Status::C, true);
+        c.a = 0x09;
+        c.clock();
+        assert_eq!(c.a, 0x04);
+        assert_eq!(c.p, Status::U | Status::C);
     }
 
     #[test]
     fn test_ora() {
-        let mut m = Machine::new();
-        m.load(
-            &[
-                // ORA $AB12
-                0x0D, 0x12, 0xAB,
-            ],
-            0,
-        );
-        m.cpu.a = 0x03;
-        m.cpu.write(0xab12, 0x05);
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 0x07);
+        let mut c = create_test_cpu(&[
+            // ORA $AB12
+            0x0D, 0x12, 0xAB,
+        ]);
+        c.a = 0x03;
+        c.write(0xab12, 0x05);
+        c.clock();
+        assert_eq!(c.a, 0x07);
     }
 
     #[test]
     fn test_pla() {
-        let mut m = Machine::new();
+        let mut c = create_test_cpu(&[
+            // PLA
+            0x68,
+        ]);
 
         // Stack underflow
         //
-        // m.reset();
-        // m.cpu.sp = 0xFF;
+        //c.reset();
+        // c.sp = 0xFF;
         // m.load(
         //     &[
         //         // PLA
         //         0x68
         //     ]
         // );
-        // m.cpu.clock();
+        // c.clock();
 
         // Pull one value
-        m.reset();
-        m.cpu.sp = 0xFE;
-        m.write(0x01FF, 0xAB);
-        m.load(
-            &[
-                // PLA
-                0x68,
-            ],
-            0,
-        );
+        c.reset();
+        c.sp = 0xFE;
+        c.write(0x01FF, 0xAB);
 
-        m.cpu.clock();
-        assert_eq!(m.cpu.a, 0xAB);
-        assert_eq!(m.cpu.sp, 0xFF);
+        c.clock();
+        assert_eq!(c.a, 0xAB);
+        assert_eq!(c.sp, 0xFF);
     }
 
     #[test]
     fn test_pha() {
-        let mut m = Machine::new();
+        let mut c = create_test_cpu(&[
+            // PHA
+            0x48,
+        ]);
 
         // Stack overflow
         //
-        // m.reset();
-        // m.cpu.sp = 0;
-        // m.cpu.a = 0xAB;
+        //c.reset();
+        // c.sp = 0;
+        // c.a = 0xAB;
         // m.load(
         //     &[
         //         // PHA
         //         0x48
         //     ]
         // );
-        // m.cpu.clock();
+        // c.clock();
 
         // Push one value
-        m.reset();
-        m.cpu.sp = 0xFF;
-        m.cpu.a = 0xAB;
-        m.load(
-            &[
-                // PHA
-                0x48,
-            ],
-            0,
-        );
+        c.reset();
+        c.sp = 0xFF;
+        c.a = 0xAB;
 
-        m.cpu.clock();
-        assert_eq!(m.read(0x01FF), 0xAB);
-        assert_eq!(m.cpu.sp, 0xFE);
+        c.clock();
+        assert_eq!(c.read(0x01FF), 0xAB);
+        assert_eq!(c.sp, 0xFE);
     }
 
     #[test]
     fn test_plp() {
-        let mut m = Machine::new();
-        let flags = Flags::U | Flags::C;
-        m.load(
-            &[
-                // SEC; PHP; CLC; PLP
-                0x38, 0x08, 0x18, 0x28,
-            ],
-            0,
-        );
-        m.debug(&[4]);
-        assert_eq!(m.cpu.status, flags);
+        let mut c = create_test_cpu(&[
+            // SEC; PHP; CLC; PLP
+            0x38, 0x08, 0x18, 0x28,
+        ]);
+        c.reset();
+        c.clock();
+        assert_eq!(c.p, Status::U | Status::C);
     }
 
     #[test]
     fn test_tax() {
-        let mut m = Machine::new();
+        let mut c = create_test_cpu(&[
+            // TAX
+            0xAA,
+        ]);
 
-        m.reset();
-        m.cpu.a = 0xAB;
-        m.load(
-            &[
-                // TAX
-                0xAA,
-            ],
-            0,
-        );
+        c.reset();
+        c.a = 0xAB;
 
-        m.cpu.clock();
-        assert_eq!(m.cpu.x, 0xAB);
+        c.clock();
+        assert_eq!(c.x, 0xAB);
     }
 
     #[test]
     fn test_bit() {
-        let mut c = create_cpu();
+        let mut c = create_test_cpu(&[]);
         c.a = 0b1;
 
         c.write(0, 0b0);
         c.bit();
-        assert_eq!(c.status, Flags::Z);
+        assert_eq!(c.p, Status::Z);
 
         c.write(0, 0b1);
         c.bit();
-        assert_eq!(c.status, Flags::empty());
+        assert_eq!(c.p, Status::empty());
 
         c.write(0, 0b11000001);
         c.bit();
-        assert_eq!(c.status, Flags::N | Flags::V);
+        assert_eq!(c.p, Status::N | Status::V);
 
         c.write(0, 0b10000001);
         c.bit();
-        assert_eq!(c.status, Flags::N);
+        assert_eq!(c.p, Status::N);
 
         c.write(0, 0b01000001);
         c.bit();
-        assert_eq!(c.status, Flags::V);
+        assert_eq!(c.p, Status::V);
     }
 }
