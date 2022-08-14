@@ -1,13 +1,11 @@
 pub trait IO {
-    fn read(&self, _addr: u16) -> u8 {
-        0
-    }
-    fn write(&mut self, _addr: u16, _data: u8) {}
+    fn read(&mut self, addr: u16) -> u8;
+
+    fn write(&mut self, addr: u16, data: u8);
 
     fn write_str(&mut self, addr: u16, str: &str) {
         for (i, c) in str.chars().enumerate() {
             self.write(addr + i as u16, c as u8);
-            println!("{}", self.read(addr + i as u16));
         }
     }
 
@@ -29,4 +27,10 @@ pub trait IO {
 
 pub struct NullIO {}
 
-impl IO for NullIO {}
+impl IO for NullIO {
+    fn read(&mut self, _addr: u16) -> u8 {
+        0
+    }
+
+    fn write(&mut self, _addr: u16, _data: u8) {}
+}

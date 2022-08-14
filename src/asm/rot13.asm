@@ -21,18 +21,17 @@ LOOP    LDA (SRC),Y     ;get from source string
         CMP #'z'+1      ;if greater than LC alphabet...
         BCS COPY        ;copy unchanged
 ;
-;if lowercase
-        CMP #'a'       
-        BCS LOWER
+        CMP #'a'        ;if lowercase...
+        BCS LOWER       ;do lowercase rot13
 ;
-UPPER   ADC #13         
-        CMP #'Z'                   
-        BMI COPY 
-        CLC
-        SBC #25
-        JMP COPY
+UPPER   ADC #13         ;rotate char right by 13         
+        CMP #'Z'        ;if still within UC alphabet...                
+        BMI COPY        ;copy rotated char
+        CLC             ;clear carry bit
+        SBC #25         ;rotate char left by 25 (equivalent to Char-('Z'+'A'))
+        JMP COPY        ;copy rotated char
 ;
-LOWER   ADC #13         
+LOWER   ADC #13         ;same as for upper         
         CMP #'z'                   
         BMI COPY
         CLC
@@ -52,12 +51,3 @@ DONE    STA (DST),Y     ;terminate destination string
         CLC             ;report conversion completed &...
         RTS             ;return to caller
 ;
-
-; ascii leetspeak lookup table
-*= $0000
-LEET    .byte 0
-*= $0041
-        .text "4BCD3FGHIJKLMN0PQR57UVWXYZ4[\]^_`"
-        .text "4bcd3fgh!jk1mn0pqr57uvwxyz"
-
-.END

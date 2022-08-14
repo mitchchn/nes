@@ -1,10 +1,13 @@
 use wasm_bindgen::prelude::*;
 
-mod bus;
 mod cpu;
 mod display;
 mod io;
 mod machine;
+mod mapper;
+mod mem;
+mod rom;
+mod stdout;
 
 #[macro_use]
 extern crate bitflags;
@@ -26,9 +29,9 @@ impl Emulator {
         Emulator { m: Machine::new() }
     }
 
-    #[wasm_bindgen]
-    pub fn load(&mut self, rom: &[u8], offset: u16) {
-        self.m.load(rom, offset)
+    // #[wasm_bindgen]
+    pub fn load(&mut self, rom: &[u8]) {
+        self.m.load(rom)
     }
 
     pub fn reset(&mut self) {

@@ -28,7 +28,7 @@ impl Display {
 }
 
 impl IO for Display {
-    fn read(&self, addr: u16) -> u8 {
+    fn read(&mut self, addr: u16) -> u8 {
         self.buffer[addr as usize]
     }
     fn write(&mut self, addr: u16, data: u8) {
