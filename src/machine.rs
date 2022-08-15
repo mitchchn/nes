@@ -122,7 +122,7 @@ mod tests {
     #[test]
     fn test_machine() {
         let mut m = Machine::new();
-        // let rom = fs::read("src/nestest.nes").expect("Could not open file");
+        let rom = fs::read("src/nestest.nes").expect("Could not open file");
 
         // let rom = [
         //     // LDA #51
@@ -135,11 +135,18 @@ mod tests {
         //     0x6e, 0x34, 0x12, 0xca, 0xd0, 0xf3, 0x8d, 0x12, 0x34, 0xad, 0x34, 0x12, 0x60,
         // ];
 
-        let rom = [0xa9, 0x05, 0x8d, 0x00, 0x05, 0xae, 0x00, 0x05, 0xe8, 0x00];
+        // let header: [u8; 0x10] = [0; 0x10];
+        // let data: [u8; 10] = [0xa9, 0x05, 0x8d, 0x00, 0x05, 0xae, 0x00, 0x05, 0xe8, 0x00];
+
+        // let rom: Vec<u8> = header
+        //     .into_iter()
+        //     .chain(data.into_iter())
+        //     .cloned()
+        //     .collect();
+
         m.load(&rom);
 
         m.reset();
-
         m.run();
     }
 }

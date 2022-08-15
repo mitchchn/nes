@@ -5,7 +5,7 @@ use crate::{io::IO, rom::Rom};
 
 pub const RAM_START: u16 = 0x0000;
 pub const RAM_END: u16 = 0x07FF;
-pub const CART_START: u16 = 0x4020;
+pub const CART_START: u16 = 0x6000;
 pub const PRG_START: u16 = 0x6000;
 pub const PRG_END: u16 = 0x7FFF;
 pub const ROM_START: u16 = 0x8000;
@@ -50,7 +50,7 @@ impl IO for Mapper {
         // println!("addr: {}", addr);
         match addr {
             RAM_START..=RAM_END => self.mem.read(addr - RAM_START),
-            ROM_START..=ROM_END => self.rom.as_ref().borrow_mut().read(addr - ROM_START),
+            CART_START..=CART_END => self.rom.as_ref().borrow_mut().read(addr),
             _ => 0,
         }
     }
