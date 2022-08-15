@@ -1,7 +1,11 @@
+use colored::{ColoredString, Colorize};
+
 use crate::io::IO;
 
 use std::cell::RefCell;
 use std::rc::Rc;
+
+const DEBUG: bool = true;
 
 bitflags! {
     /// Processor status register
@@ -581,6 +585,10 @@ impl CPU6502 {
 
         self.cycles += 1;
         self.cycles_left -= 1;
+
+        if (DEBUG) {
+            self.print_state();
+        }
     }
 
     pub fn cycles(&self) -> u64 {
@@ -589,6 +597,69 @@ impl CPU6502 {
 
     pub fn halted(&self) -> bool {
         self.p.contains(Status::B)
+    }
+
+    pub fn print_state(&mut self) {
+        let color_flag = |f: u8| {
+            if f == 1 {
+                f.to_string().green()
+            } else {
+                ColoredString::from(f.to_string().as_str())
+            }
+        };
+
+        let f: [u8; 8] = [
+            if self.p.contains(Status::N) { 1 } else { 0 },
+            if self.p.contains(Status::V) { 1 } else { 0 },
+            if self.p.contains(Status::U) { 1 } else { 0 },
+            if self.p.contains(Status::B) { 1 } else { 0 },
+            if self.p.contains(Status::D) { 1 } else { 0 },
+            if self.p.contains(Status::I) { 1 } else { 0 },
+            if self.p.contains(Status::Z) { 1 } else { 0 },
+            if self.p.contains(Status::C) { 1 } else { 0 },
+        ];
+
+        println!("{}", self.decode_instruction());
+
+        println!(
+            "{}",
+            "PC    A  X  Y    SP    N V - B D I Z C".white().on_blue(),
+        );
+        println!(
+            "{:04X}  {:02X} {:02X} {:02X}   {:02X}    {} {} {} {} {} {} {} {}\n",
+            self.pc,
+            self.a,
+            self.x,
+            self.y,
+            self.sp,
+            color_flag(f[0]),
+            color_flag(f[1]),
+            color_flag(f[2]),
+            color_flag(f[3]),
+            color_flag(f[4]),
+            color_flag(f[5]),
+            color_flag(f[6]),
+            color_flag(f[7])
+        );
+    }
+
+    pub fn decode_instruction(&mut self) -> String {
+        let formatted_operand = match self.instruction.1 {
+            Mode::IMP => "".to_string(),
+            Mode::IMM => format!("#${:02X}", self.read(self.op_addr)),
+            Mode::ACC => "A".to_string(),
+            Mode::ABS => format!("${:04X}", self.op_addr),
+            Mode::ABX => format!("${:04X},X", self.op_addr),
+            Mode::ABY => format!("${:04X},Y", self.op_addr),
+            Mode::ZPG => format!("${:02X}", self.op_addr),
+            Mode::ZPX => format!("${:02X},X", self.op_addr),
+            Mode::ZPY => format!("${:02X},Y", self.op_addr),
+            Mode::ZIX => format!("(${:02X},X)", self.op_addr),
+            Mode::ZIY => format!("(${:02X},Y)", self.op_addr),
+            Mode::IND => format!("(${:04X})", self.op_addr),
+            Mode::REL => format!("${:04X}", self.op_addr),
+        };
+        format!("{:#?} {}", self.instruction.0, &formatted_operand)
     }
 
     // Addresing Modes
