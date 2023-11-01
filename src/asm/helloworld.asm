@@ -1,0 +1,28 @@
+LDA 'H'
+STA $A0
+LDA 'E'
+STA $A1
+LDA 'L'
+STA $A2
+LDA 'L'
+STA $A3
+LDA 'O'
+STA $A4
+LDA ' '
+STA $A5
+LDA 'M'
+STA $A6
+LDA 'I'
+STA $A7
+LDA 'A'
+STA $A8
+LDA 'U'
+STA $A9
+LDA ' '
+STA $AA
+LDA '='
+STA $AB
+LDA '.'
+STA $AC
+LDA '='
+STA $AD

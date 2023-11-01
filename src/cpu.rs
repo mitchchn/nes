@@ -5,11 +5,11 @@ use crate::io::IO;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 bitflags! {
     /// Processor status register
-    pub(crate) struct Status: u8 {
+    pub struct Status: u8 {
         /// Negative
         const N = 1 << 7;
         /// Overflow
@@ -221,7 +221,7 @@ pub enum Opcode {
 
 pub type Instruction = (Opcode, Mode, u8, fn(&mut CPU6502));
 
-const INSTRUCTIONS: [Instruction; 256] = [
+pub const INSTRUCTIONS: [Instruction; 256] = [
     (Opcode::BRK, Mode::IMP, 7, CPU6502::brk),
     (Opcode::ORA, Mode::ZIX, 6, CPU6502::ora),
     (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
@@ -484,25 +484,25 @@ pub struct CPU6502 {
     mem: Rc<RefCell<dyn IO>>,
 
     /// Program counter
-    pub(crate) pc: u16,
+    pub pc: u16,
     /// Accmulator
-    pub(crate) a: u8,
+    pub a: u8,
     /// X index
-    pub(crate) x: u8,
+    pub x: u8,
     /// Y index
-    pub(crate) y: u8,
+    pub y: u8,
     /// Stack pointer
-    pub(crate) sp: u8,
+    pub sp: u8,
     /// Processor status
-    pub(crate) p: Status,
+    pub p: Status,
 
     // Total cycle count
-    pub(crate) cycles: u64,
+    pub cycles: u64,
 
     // Current instruction
-    pub(crate) instruction: Instruction,
-    pub(crate) op_addr: u16,
-    pub(crate) cycles_left: u8,
+    pub instruction: Instruction,
+    pub op_addr: u16,
+    pub cycles_left: u8,
 }
 
 impl CPU6502 {

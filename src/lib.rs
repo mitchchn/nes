@@ -1,11 +1,11 @@
 use wasm_bindgen::prelude::*;
 
-mod cpu;
+pub mod cpu;
 mod display;
-mod io;
+pub mod io;
 mod machine;
 mod mapper;
-mod mem;
+pub mod mem;
 mod rom;
 mod stdout;
 

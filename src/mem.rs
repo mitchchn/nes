@@ -1,6 +1,6 @@
 use crate::io::IO;
 
-pub struct Memory([u8; 0xFFFF + 1]);
+pub struct Memory(pub [u8; 0xFFFF + 1]);
 
 impl Memory {
     pub fn new() -> Self {
