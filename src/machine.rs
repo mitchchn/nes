@@ -1,22 +1,23 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::{Mutex, Arc};
 
 use crate::cpu::{Mode, CPU6502};
 use crate::mapper::Mapper;
 use crate::{io::IO, rom::Rom};
 
 pub struct Machine {
-    pub mapper: Rc<RefCell<Mapper>>,
-    pub rom: Rc<RefCell<Rom>>,
+    pub mapper: Arc<Mutex<Mapper>>,
+    pub rom: Arc<Mutex<Rom>>,
     pub cpu: CPU6502,
     pub instruction_log: Vec<String>,
 }
 
 impl Machine {
     pub fn new() -> Self {
-        let rom = Rc::new(RefCell::new(Rom::new()));
+        let rom = Arc::new(Mutex::new(Rom::new()));
 
-        let mapper = Rc::new(RefCell::new(Mapper::new(rom.clone())));
+        let mapper = Arc::new(Mutex::new(Mapper::new(rom.clone())));
         let cpu = CPU6502::new(mapper.clone());
 
         let m = Machine {
@@ -101,16 +102,16 @@ impl Machine {
     }
 
     pub fn load(&mut self, rom: &[u8]) {
-        self.rom.borrow_mut().load(rom);
+        self.rom.lock().unwrap().load(rom);
     }
 }
 
 impl IO for Machine {
     fn read(&mut self, addr: u16) -> u8 {
-        self.mapper.borrow_mut().read(addr)
+        self.mapper.lock().unwrap().read(addr)
     }
     fn write(&mut self, addr: u16, data: u8) {
-        self.mapper.borrow_mut().write(addr, data)
+        self.mapper.lock().unwrap().write(addr, data)
     }
 }
 

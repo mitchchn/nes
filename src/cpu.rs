@@ -1,9 +1,11 @@
 use colored::{ColoredString, Colorize};
 
 use crate::io::IO;
+use crate::mem::Memory;
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::{Mutex, Arc};
 
 const DEBUG: bool = false;
 
@@ -481,7 +483,7 @@ pub const INSTRUCTIONS: [Instruction; 256] = [
 ];
 
 pub struct CPU6502 {
-    mem: Rc<RefCell<dyn IO>>,
+    mem: Arc<Mutex<dyn IO + Send>>,
 
     /// Program counter
     pub pc: u16,
@@ -500,13 +502,13 @@ pub struct CPU6502 {
     pub cycles: u64,
 
     // Current instruction
-    pub instruction: Instruction,
+    pub instruction: Option<(u16, Instruction)>,
     pub op_addr: u16,
     pub cycles_left: u8,
 }
 
 impl CPU6502 {
-    pub fn new(mem: Rc<RefCell<dyn IO>>) -> Self {
+    pub fn new(mem: Arc<Mutex<dyn IO + Send>>) -> Self {
         let cpu = CPU6502 {
             mem,
             pc: 0,
@@ -516,7 +518,7 @@ impl CPU6502 {
             sp: 0,
             p: Status::empty(),
             cycles: 0,
-            instruction: INSTRUCTIONS[0],
+            instruction: None,
             op_addr: 0,
             cycles_left: 0,
         };
@@ -545,14 +547,12 @@ impl CPU6502 {
         self.sp = sp;
         self.p = status;
 
-        self.instruction = INSTRUCTIONS[0];
+        self.instruction = None;
         self.op_addr = 0;
         self.cycles_left = 0;
     }
 
-    pub fn execute(&mut self, (opcode, mode, cycles, op): Instruction) {
-        self.instruction = (opcode, mode, cycles, op);
-
+    pub fn execute(&mut self, (_opcode, mode, cycles, op): Instruction) {
         match mode {
             Mode::ABS => self.abs(),
             Mode::ABX => self.abx(),
@@ -575,10 +575,12 @@ impl CPU6502 {
 
     pub fn clock(&mut self) {
         if self.cycles_left == 0 {
+            let inst_addr = self.pc;
             let opcode = self.pop_u8();
 
             let instruction = INSTRUCTIONS[opcode as usize];
 
+            self.instruction = Some((inst_addr, instruction));
             self.cycles_left = instruction.2;
             self.execute(instruction);
         }
@@ -644,7 +646,8 @@ impl CPU6502 {
     }
 
     pub fn decode_instruction(&mut self) -> String {
-        let formatted_operand = match self.instruction.1 {
+        if let Some(instruction) = self.instruction {
+        let formatted_operand = match instruction.1.1 {
             Mode::IMP => "".to_string(),
             Mode::IMM => format!("#${:02X}", self.read(self.op_addr)),
             Mode::ACC => "A".to_string(),
@@ -659,7 +662,10 @@ impl CPU6502 {
             Mode::IND => format!("(${:04X})", self.op_addr),
             Mode::REL => format!("${:04X}", self.op_addr),
         };
-        format!("{:#?} {}", self.instruction.0, &formatted_operand)
+            format!("{:#?} {}", instruction.1, &formatted_operand)
+        } else {
+            "".to_string()
+        }
     }
 
     // Addresing Modes
@@ -816,10 +822,8 @@ impl CPU6502 {
     ///
     fn xxx(&mut self) {
         dbg!(
-            "XXX - Illegal Instruction: ({}, {}, {})",
-            self.instruction.0,
-            self.instruction.1,
-            self.instruction.2
+            "XXX - Illegal Instruction: ({})",
+            self.instruction
         );
     }
 
@@ -1216,11 +1220,12 @@ impl CPU6502 {
     ///
     /// http://www.obelisk.me.uk/6502/reference.html#JSR
     fn jsr(&mut self) {
-        let pc_hi = (self.pc >> 8) as u8;
-        let pc_lo = (self.pc) as u8;
+        let ret_addr = self.pc - 1;
 
-        self.push_stack(pc_hi);
-        self.push_stack(pc_lo);
+        let ret_addr_hi = (ret_addr >> 8) as u8;
+        let ret_addr_lo = ret_addr as u8;
+        self.push_stack(ret_addr_hi);
+        self.push_stack(ret_addr_lo);
 
         self.pc = self.op_addr;
     }
@@ -1247,7 +1252,7 @@ impl CPU6502 {
         let pc_hi = self.pop_stack() as u16;
 
         let pc = (pc_hi << 8) | pc_lo;
-        self.pc = pc;
+        self.pc = pc + 1;
     }
 
     /// LDA - Load Accumulator With Memory
@@ -1294,7 +1299,9 @@ impl CPU6502 {
     /// PHP - Push Processor Status
     ///
     fn php(&mut self) {
-        self.push_stack(self.p.bits());
+        // Bits 4 and 5 are set to 1 when pushed to the stack
+        let php_bits = self.p | Status::B | Status::U;
+        self.push_stack(php_bits.bits());
     }
 
     /// PLA - Pull Accumulator from Stack
@@ -1490,12 +1497,12 @@ impl CPU6502 {
     }
 }
 
-impl IO for CPU6502 {
+impl IO  for CPU6502 {
     fn read(&mut self, addr: u16) -> u8 {
-        self.mem.borrow_mut().read(addr)
+        self.mem.lock().unwrap().read(addr)
     }
     fn write(&mut self, addr: u16, data: u8) {
-        self.mem.borrow_mut().write(addr, data)
+        self.mem.lock().unwrap().write(addr, data)
     }
 }
 
@@ -1508,7 +1515,7 @@ mod tests {
     fn create_test_cpu(mem: &[u8]) -> CPU6502 {
         let mut m = Memory::new();
         m.load(mem, 0);
-        CPU6502::new(Rc::new(RefCell::new(m)))
+        CPU6502::new(Arc::new(Mutex::new(m)))
     }
 
     #[test]
@@ -1520,7 +1527,7 @@ mod tests {
         c.write(0xFFFC, 0x34);
         c.write(0xFFFC + 1, 0x12);
 
-        assert_eq!(c.mem.borrow_mut().read(0xFFFC), 0x34);
+        assert_eq!(c.mem.lock().unwrap().read(0xFFFC), 0x34);
 
         c.reset();
 
@@ -1608,7 +1615,7 @@ mod tests {
 
         c.clock();
 
-        assert_eq!(c.mem.borrow_mut().read(0xAB), 0x33);
+        assert_eq!(c.mem.lock().unwrap().read(0xAB), 0x33);
     }
 
     #[test]

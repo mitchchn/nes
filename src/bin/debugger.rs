@@ -1,42 +1,74 @@
+extern crate sdl2;
+
 use std::cell::RefCell;
 use std::io::stdout;
 use std::rc::Rc;
-use std::{env, fs, io};
+use std::sync::atomic::AtomicU16;
+use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread::{JoinHandle, Thread};
+use std::time::Duration;
+use std::{env, fs, io, thread};
 
 use crossterm::event::{Event, KeyCode};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::{event, ExecutableCommand};
+use nes::cpu::Instruction;
 use ratatui::prelude::{Constraint, CrosstermBackend, Direction, Layout};
-use ratatui::style::{Style, Stylize};
+use ratatui::style::{Color, Style, Stylize};
+use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, Padding, Paragraph, Wrap};
+use ratatui::widgets::canvas::{Canvas, Circle, Map, MapResolution, Points, Rectangle};
+use ratatui::widgets::{
+    Axis, Block, BorderType, Borders, Chart, Dataset, Padding, Paragraph, Wrap,
+};
 use ratatui::{Frame, Terminal};
 
 use nes::{
     cpu::{Mode, Status, CPU6502, INSTRUCTIONS},
+    display::Display,
     io::IO,
     mem::Memory,
 };
 
+enum CpuMessage {
+    Pause,
+}
+
+pub struct DebuggerCpuState {
+    /// Program counter
+    pub pc: u16,
+    /// Accmulator
+    pub a: u8,
+    /// X index
+    pub x: u8,
+    /// Y index
+    pub y: u8,
+    /// Stack pointer
+    pub sp: u8,
+    /// Processor status
+    pub p: Status,
+}
+
 pub struct Debugger {
-    pub cpu: CPU6502,
-    pub mem: Rc<RefCell<Memory>>,
-    pub instruction_log: Vec<String>,
-    pub last_instr_addr: u16,
+    pub cpu: Arc<Mutex<CPU6502>>,
+    pub mem: Arc<Mutex<Memory>>,
+    pub instruction_log: Vec<(u16, String)>,
+    cpu_thread: Option<mpsc::Sender<CpuMessage>>,
 }
 
 impl Debugger {
     pub fn new() -> Self {
-        let mem = Rc::new(RefCell::new(Memory::new()));
-        let cpu = CPU6502::new(mem.clone());
+        let mem = Arc::new(Mutex::new(Memory::new()));
+        let cpu = Arc::new(Mutex::new(CPU6502::new(mem.clone())));
 
         let m = Debugger {
             cpu,
             mem,
             instruction_log: vec![],
-            last_instr_addr: 0,
+            cpu_thread: None,
         };
         m
     }
@@ -45,65 +77,96 @@ impl Debugger {
         let mut instructions = vec![];
 
         let mut addr = 0;
-        while addr < 0xFFFF {
+        while addr < 0xFFFF - 2 {
             let opcode: u8 = self.read(addr);
 
             let instruction = INSTRUCTIONS[opcode as usize];
-            let op_addr =
-                if matches!(instruction.1, Mode::IMP) || matches!(instruction.1, Mode::ACC) {
-                    addr
-                } else {
-                    addr + 1
-                };
+            let next_instr_addr = match instruction.1 {
+                Mode::ACC | Mode::IMP => addr + 1,
+                Mode::ABS | Mode::ABX | Mode::ABY => addr + 3,
+                _ => addr + 2,
+            };
+
+            let op8 = self.read(addr + 1);
+            let op16: u16 = ((self.read(addr + 2) as u16) << 8) | (self.read(addr + 1) as u16);
 
             let formatted_operand = match instruction.1 {
                 Mode::IMP => "".to_string(),
-                Mode::IMM => format!("#${:02X}", self.read(op_addr)),
                 Mode::ACC => "A".to_string(),
-                Mode::ABS => format!("${:04X}", op_addr),
-                Mode::ABX => format!("${:04X},X", op_addr),
-                Mode::ABY => format!("${:04X},Y", op_addr),
-                Mode::ZPG => format!("${:02X}", op_addr),
-                Mode::ZPX => format!("${:02X},X", op_addr),
-                Mode::ZPY => format!("${:02X},Y", op_addr),
-                Mode::ZIX => format!("(${:02X},X)", op_addr),
-                Mode::ZIY => format!("(${:02X},Y)", op_addr),
-                Mode::IND => format!("(${:04X})", op_addr),
-                Mode::REL => format!("${:04X}", op_addr),
+                Mode::IMM => format!("#${:02X}", op8),
+                Mode::ABS => format!("${:04X}", op16),
+                Mode::ABX => format!("${:04X},X", op16),
+                Mode::ABY => format!("${:04X},Y", op16),
+                Mode::ZPG => format!("${:02X}", op8),
+                Mode::ZPX => format!("${:02X},X", op8),
+                Mode::ZPY => format!("${:02X},Y", op8),
+                Mode::ZIX => format!("(${:02X},X)", op8),
+                Mode::ZIY => format!("(${:02X},Y)", op8),
+                Mode::IND => format!("(${:04X})", op8),
+                Mode::REL => format!("${:02X}", op8),
             };
             instructions.push((addr, format!("{:#?} {}", instruction.0, &formatted_operand)));
-            addr = op_addr + 1;
+            addr = next_instr_addr
         }
         instructions
     }
 
     pub fn load(&mut self, data: &[u8], offset: u16) {
-        self.mem.borrow_mut().load(data, offset)
+        self.mem.lock().unwrap().load(data, offset);
+        self.instruction_log = self.disassemble();
     }
 
     pub fn step(&mut self) {
-        self.last_instr_addr = self.cpu.pc;
+        let mut cpu: std::sync::MutexGuard<'_, CPU6502> = self.cpu.lock().unwrap();
 
-        self.cpu.clock();
-        while !self.cpu.halted() && self.cpu.cycles_left > 0 {
-            self.cpu.clock()
+        cpu.clock();
+        while !cpu.halted() && cpu.cycles_left > 0 {
+            cpu.clock();
         }
-
-        let decoded_instr = self.cpu.decode_instruction();
-        self.instruction_log
-            .push(format!("{:04X}  {}", self.cpu.pc, decoded_instr));
     }
 
     pub fn reset(&mut self) {
-        self.cpu.reset();
-        self.instruction_log = vec![];
-        self.last_instr_addr = 0;
+        let mut cpu = self.cpu.lock().unwrap();
+
+        cpu.reset();
+        cpu.pc = 0x0400;
+    }
+
+    pub fn pause(&mut self) {
+        // let mut cpu = self.cpu.lock().unwrap();
+        if let Some(cpu_thread) = &self.cpu_thread {
+            let _ = cpu_thread.send(CpuMessage::Pause);
+        }
     }
 
     pub fn run(&mut self) {
-        while !self.cpu.halted() {
-            self.step();
-        }
+        let cpu = self.cpu.clone();
+        let (tx, rx) = mpsc::channel::<CpuMessage>();
+        self.cpu_thread = Some(tx);
+
+        thread::spawn(move || loop {
+            let mut cpu = cpu.lock().unwrap();
+            cpu.clock();
+
+            // breakpoint lol
+            // if let Some(inst) = cpu.instruction {
+            //     if inst.0 == 0x998 {
+            //         break;
+            //     }
+            // }
+
+            if cpu.halted() {
+                break;
+            }
+            drop(cpu);
+            thread::sleep(Duration::new(0, 1000));
+            match rx.try_recv() {
+                Ok(CpuMessage::Pause) | Err(TryRecvError::Disconnected) => {
+                    break;
+                }
+                Err(TryRecvError::Empty) => {}
+            }
+        });
     }
 
     pub fn debug(&mut self) -> io::Result<()> {
@@ -111,7 +174,14 @@ impl Debugger {
         stdout().execute(EnterAlternateScreen)?;
         let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
 
+        // let mut d = Display::new();
+        // d.show();
+
         loop {
+            let cpu = self.cpu.lock().unwrap();
+
+            // d.flush(&self.mem.lock().unwrap().0[0x200..=0x5FF]);
+
             terminal.draw(|frame: &mut Frame| {
                 let outer_layout = Layout::default()
                     .direction(Direction::Vertical)
@@ -120,17 +190,17 @@ impl Debugger {
 
                 let main_layout = Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                    .constraints([Constraint::Min(10), Constraint::Length(54)])
                     .split(outer_layout[0]);
 
                 let left_layout = Layout::default()
                     .direction(Direction::Vertical)
-                    .constraints([Constraint::Max(6), Constraint::Min(10)])
+                    .constraints([Constraint::Length(6), Constraint::Min(10)])
                     .split(main_layout[0]);
 
                 let right_layout = Layout::default()
                     .direction(Direction::Vertical)
-                    .constraints([Constraint::Percentage(100)])
+                    .constraints([Constraint::Length(21), Constraint::Min(0)])
                     .split(main_layout[1]);
 
                 let color_flag = |f: u8| {
@@ -142,14 +212,14 @@ impl Debugger {
                 };
 
                 let f: [u8; 8] = [
-                    if self.cpu.p.contains(Status::N) { 1 } else { 0 },
-                    if self.cpu.p.contains(Status::V) { 1 } else { 0 },
-                    if self.cpu.p.contains(Status::U) { 1 } else { 0 },
-                    if self.cpu.p.contains(Status::B) { 1 } else { 0 },
-                    if self.cpu.p.contains(Status::D) { 1 } else { 0 },
-                    if self.cpu.p.contains(Status::I) { 1 } else { 0 },
-                    if self.cpu.p.contains(Status::Z) { 1 } else { 0 },
-                    if self.cpu.p.contains(Status::C) { 1 } else { 0 },
+                    if cpu.p.contains(Status::N) { 1 } else { 0 },
+                    if cpu.p.contains(Status::V) { 1 } else { 0 },
+                    if cpu.p.contains(Status::U) { 1 } else { 0 },
+                    if cpu.p.contains(Status::B) { 1 } else { 0 },
+                    if cpu.p.contains(Status::D) { 1 } else { 0 },
+                    if cpu.p.contains(Status::I) { 1 } else { 0 },
+                    if cpu.p.contains(Status::Z) { 1 } else { 0 },
+                    if cpu.p.contains(Status::C) { 1 } else { 0 },
                 ];
 
                 let status_header = Line::styled(
@@ -159,7 +229,7 @@ impl Debugger {
                 let status_line = Line::from(vec![
                     format!(
                         "{:04X}  {:02X} {:02X} {:02X}   {:02X}    ",
-                        self.cpu.pc, self.cpu.a, self.cpu.x, self.cpu.y, self.cpu.sp
+                        cpu.pc, cpu.a, cpu.x, cpu.y, cpu.sp
                     )
                     .into(),
                     color_flag(f[0]),
@@ -186,23 +256,66 @@ impl Debugger {
                         .borders(Borders::ALL),
                 );
 
+                let cpu_addr = if let Some((addr, _)) = cpu.instruction {
+                    addr
+                } else {
+                    0
+                };
+
+                // let pivot_instr = self.instruction_log.iter().find(|(addr,_)| *addr == cpu_addr);
+
                 let trace_text: Text<'_> = Text::from(
                     self.instruction_log
                         .iter()
-                        .map(Line::raw)
+                        .map(|(addr, inst)| {
+                            let inst = format!("{:04X} {}", *addr, inst);
+
+                            let instruction = cpu.instruction;
+
+                            // if matches!(Some((*addr,)), cpu.instruction) {
+                            //     Line::styled(inst, Style::default().fg(Color::Green))
+                            // } else {
+                            //     Line::raw(inst)
+                            // }
+
+                            match cpu.instruction {
+                                Some((cpu_addr, _)) if cpu_addr == *addr => {
+                                    Line::styled(inst, Style::default().fg(Color::Green))
+                                }
+                                _ => Line::raw(inst),
+                            }
+                        })
                         .collect::<Vec<Line<'_>>>(),
                 );
 
                 // Lines visible in trace area, subtracting 4 from height for border and padding
                 let trace_lines = (left_layout[1].height - 4) as usize;
-                let trace_scroll_pos = if trace_text.lines.len() > trace_lines {
-                    trace_text.lines.len() - trace_lines
-                } else {
-                    0
-                };
+                // let trace_scroll_pos = if trace_text.lines.len() > trace_lines {
+                //     trace_text.lines.len() - trace_lines
+                // } else {
+                //     0
+                // };
+                let trace_scroll_pos = {
+                    let pos = if let Some((cpu_addr, _)) = cpu.instruction {
+                        let pos = self
+                            .instruction_log
+                            .iter()
+                            .position(|(addr, _)| cpu_addr == *addr)
+                            .unwrap_or_default();
+
+                        if pos > (trace_lines / 2) {
+                            pos - (trace_lines / 2)
+                        } else {
+                            pos
+                        }
+                    } else {
+                        0
+                    };
+                    pos
+                } as u16;
 
                 let trace = Paragraph::new(trace_text)
-                    .scroll((trace_scroll_pos as u16, 0))
+                    .scroll((trace_scroll_pos, 0))
                     .block(
                         Block::default()
                             .title("trace")
@@ -210,10 +323,32 @@ impl Debugger {
                             .borders(Borders::ALL),
                     );
 
+                let mut data: Vec<(f64, f64)> = vec![];
+
+                for i in 0x200..=0x5FF {
+                    // if self.mem.borrow().0[i] == 0 {
+                    //     continue;
+                    // }
+                    let x_pos = (((i - 0x200) % 32) as f64 * 1.0);
+                    let y_pos = 32.0 - ((((i - 0x200) as f64) / 32.0).floor() * 1.0);
+                    data.push((x_pos, y_pos as f64));
+                }
+
+                let datasets: Vec<Dataset<'_>> = vec![Dataset::default()
+                    .marker(Marker::Braille)
+                    .style(Style::default().fg(Color::White))
+                    .data(&data)];
+
+                let display = Chart::new(datasets)
+                    .block(Block::default().padding(Padding::new(4, 4, 1, 1)))
+                    .x_axis(Axis::default().bounds([0.0, 32.0]))
+                    .y_axis(Axis::default().bounds([0.0, 32.0]));
+
                 // Display memory as rows of 8 bytes indexed by address
                 let mem_text = Text::from(
                     self.mem
-                        .borrow()
+                        .lock()
+                        .unwrap()
                         .0
                         .chunks(8)
                         .into_iter()
@@ -254,9 +389,12 @@ impl Debugger {
 
                 frame.render_widget(status, left_layout[0]);
                 frame.render_widget(trace, left_layout[1]);
-                frame.render_widget(mem, right_layout[0]);
+                frame.render_widget(display, right_layout[0]);
+                frame.render_widget(mem, right_layout[1]);
                 frame.render_widget(command, outer_layout[1]);
             })?;
+
+            drop(cpu);
             if event::poll(std::time::Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('q') {
@@ -273,6 +411,10 @@ impl Debugger {
                         && key.code == KeyCode::Char('g')
                     {
                         self.run();
+                    } else if key.kind == event::KeyEventKind::Press
+                        && key.code == KeyCode::Char('p')
+                    {
+                        self.pause();
                     }
                 }
             }
@@ -286,10 +428,10 @@ impl Debugger {
 
 impl IO for Debugger {
     fn read(&mut self, addr: u16) -> u8 {
-        self.mem.borrow_mut().read(addr)
+        self.mem.lock().unwrap().read(addr)
     }
     fn write(&mut self, addr: u16, data: u8) {
-        self.mem.borrow_mut().write(addr, data)
+        self.mem.lock().unwrap().write(addr, data)
     }
 }
 
@@ -298,9 +440,18 @@ pub fn main() {
     let rom = if let Some(arg) = arg {
         fs::read(arg).expect("Usage: debugger [FILENAME]")
     } else {
+        // vec![
+        //     0xa9, 0x00, 0xa2, 0x08, 0x4e, 0x34, 0x12, 0x90, 0x04, 0x18, 0x6d, 0xff, 0xff, 0x6a,
+        //     0x6e, 0x34, 0x12, 0xca, 0xd0, 0xf3, 0x8d, 0x12, 0x34, 0xad, 0x34, 0x12, 0x60,
+        // ]
+        // vec![
+        //     0xa9, 0x01, 0x8d, 0x00, 0x02, 0xa9, 0x05, 0x8d, 0x01, 0x02, 0xa9, 0x08, 0x8d, 0x02, 0x02
+        // ]
+        // vec![0xa9, 0x01, 0xa2, 0x00, 0x9d, 0x00, 0x02, 0xe8, 0x10, 0xfa]
+        // vec![0xa2, 0x00, 0xa9, 0x01, 0x9d, 0x00, 0x02, 0xe8, 0x10, 0xfa]
         vec![
-            0xa9, 0x00, 0xa2, 0x08, 0x4e, 0x34, 0x12, 0x90, 0x04, 0x18, 0x6d, 0xff, 0xff, 0x6a,
-            0x6e, 0x34, 0x12, 0xca, 0xd0, 0xf3, 0x8d, 0x12, 0x34, 0xad, 0x34, 0x12, 0x60,
+            0xa2, 0x00, 0xa9, 0x01, 0x9d, 0x00, 0x02, 0xa4, 0xff, 0x88, 0xd0, 0xfd, 0xe8, 0x10,
+            0xf5,
         ]
     };
 
@@ -308,6 +459,6 @@ pub fn main() {
     // let rom = fs::read("src/nestest.nes").expect("Could not open file");
 
     d.load(&rom, 0);
-    d.cpu.reset();
+    d.reset();
     let _ = d.debug();
 }
