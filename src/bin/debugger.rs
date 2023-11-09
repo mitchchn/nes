@@ -2,12 +2,13 @@ extern crate sdl2;
 
 use std::cell::RefCell;
 use std::io::stdout;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::AtomicU16;
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::{JoinHandle, Thread};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use std::{env, fs, io, thread};
 
 use crossterm::event::{Event, KeyCode};
@@ -57,6 +58,7 @@ pub struct Debugger {
     pub mem: Arc<Mutex<Memory>>,
     pub instruction_log: Vec<(u16, String)>,
     cpu_thread: Option<mpsc::Sender<CpuMessage>>,
+    breakpoints: Vec<u16>,
 }
 
 impl Debugger {
@@ -69,6 +71,7 @@ impl Debugger {
             mem,
             instruction_log: vec![],
             cpu_thread: None,
+            breakpoints: vec![],
         };
         m
     }
@@ -130,12 +133,20 @@ impl Debugger {
 
         cpu.reset();
         cpu.pc = 0x0400;
+        self.breakpoints = vec![
+            // success!
+            0x3381,
+        ]
+        // cpu.pc = 0x3387;
+        // cpu.pc = 0x331C;
+        // cpu.pc = 0x36AD;
     }
 
     pub fn pause(&mut self) {
         // let mut cpu = self.cpu.lock().unwrap();
-        if let Some(cpu_thread) = &self.cpu_thread {
-            let _ = cpu_thread.send(CpuMessage::Pause);
+        if self.cpu_thread.is_some() {
+            // let _ = cpu_thread.send(CpuMessage::Pause);
+            self.cpu_thread = None;
         }
     }
 
@@ -143,23 +154,37 @@ impl Debugger {
         let cpu = self.cpu.clone();
         let (tx, rx) = mpsc::channel::<CpuMessage>();
         self.cpu_thread = Some(tx);
+        let breakpoints = self.breakpoints.clone();
 
         thread::spawn(move || loop {
             let mut cpu = cpu.lock().unwrap();
             cpu.clock();
 
-            // breakpoint lol
-            // if let Some(inst) = cpu.instruction {
-            //     if inst.0 == 0x998 {
-            //         break;
-            //     }
-            // }
+            // check breakpoints
+            if let Some(inst) = cpu.instruction {
+                if breakpoints.contains(&inst.0) {
+                    break;
+                }
+            }
 
             if cpu.halted() {
                 break;
             }
             drop(cpu);
-            thread::sleep(Duration::new(0, 1000));
+
+            // Spinwait
+            // let cycle_length = Duration::from_micros(5);
+            // let cycle_start = SystemTime::now();
+            // while SystemTime::now()
+            //     .duration_since(cycle_start)
+            //     .unwrap_or(cycle_length)
+            //     < cycle_length
+            // {
+            //     std::hint::spin_loop();
+            // }
+
+            // thread::sleep(Duration::new(0, 1000));
+
             match rx.try_recv() {
                 Ok(CpuMessage::Pause) | Err(TryRecvError::Disconnected) => {
                     break;
@@ -190,12 +215,12 @@ impl Debugger {
 
                 let main_layout = Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints([Constraint::Min(10), Constraint::Length(54)])
+                    .constraints([Constraint::Min(10), Constraint::Length(58)])
                     .split(outer_layout[0]);
 
                 let left_layout = Layout::default()
                     .direction(Direction::Vertical)
-                    .constraints([Constraint::Length(6), Constraint::Min(10)])
+                    .constraints([Constraint::Length(10), Constraint::Min(10)])
                     .split(main_layout[0]);
 
                 let right_layout = Layout::default()
@@ -240,11 +265,29 @@ impl Debugger {
                     color_flag(f[5]),
                     color_flag(f[6]),
                     color_flag(f[7]),
+                    format!("      Cycles: {}", cpu.cycles).into()
                 ]);
 
                 let command = Paragraph::new(Text::from(vec![
                     Line::from("6502 CPU Emulator".light_yellow()),
-                    Line::raw("reset (r)    step (space)    continue (g)    quit (q)"),
+                    Line::from(vec![
+                        "[r]".bold(),
+                        "eset   ".dim(),
+                        "[n]".bold(),
+                        "ext   ".dim(),
+                        if self.cpu_thread.is_some() {
+                            "[s]".bold()
+                        } else {
+                            "[g]".bold()
+                        },
+                        if self.cpu_thread.is_some() {
+                            "top   ".dim()
+                        } else {
+                            "o   ".dim()
+                        },
+                        "[q]".bold(),
+                        "uit".dim(),
+                    ]),
                 ]))
                 .block(Block::default().padding(Padding::horizontal(1)));
 
@@ -323,26 +366,59 @@ impl Debugger {
                             .borders(Borders::ALL),
                     );
 
-                let mut data: Vec<(f64, f64)> = vec![];
+                // let mut data: Vec<(f64, f64)> = vec![];
 
-                for i in 0x200..=0x5FF {
-                    // if self.mem.borrow().0[i] == 0 {
-                    //     continue;
-                    // }
-                    let x_pos = (((i - 0x200) % 32) as f64 * 1.0);
-                    let y_pos = 32.0 - ((((i - 0x200) as f64) / 32.0).floor() * 1.0);
-                    data.push((x_pos, y_pos as f64));
-                }
+                // for i in 0x200..=0x5FF {
+                //     // if self.mem.borrow().0[i] == 0 {
+                //     //     continue;
+                //     // }
+                //     let x_pos = (((i - 0x200) % 32) as f64 * 1.0);
+                //     let y_pos = 32.0 - ((((i - 0x200) as f64) / 32.0).floor() * 1.0);
+                //     data.push((x_pos, y_pos as f64));
+                // }
 
-                let datasets: Vec<Dataset<'_>> = vec![Dataset::default()
-                    .marker(Marker::Braille)
-                    .style(Style::default().fg(Color::White))
-                    .data(&data)];
+                // let datasets: Vec<Dataset<'_>> = vec![Dataset::default()
+                //     .marker(Marker::Braille)
+                //     .style(Style::default().fg(Color::White))
+                //     .data(&data)];
 
-                let display = Chart::new(datasets)
-                    .block(Block::default().padding(Padding::new(4, 4, 1, 1)))
-                    .x_axis(Axis::default().bounds([0.0, 32.0]))
-                    .y_axis(Axis::default().bounds([0.0, 32.0]));
+                // let display = Chart::new(datasets)
+                //     .block(Block::default().padding(Padding::new(4, 4, 1, 1)))
+                //     .x_axis(Axis::default().bounds([0.0, 32.0]))
+                //     .y_axis(Axis::default().bounds([0.0, 32.0]));
+
+                // Display memory as rows of 8 bytes indexed by address
+                let stack_text = Line::from(
+                    self.mem.lock().unwrap().0[0x100..=0x1FF]
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, byte)| {
+                            let byte_text = format!("{:02X} ", byte);
+                            if cpu.sp == idx as u8 {
+                                Span::styled(
+                                    byte_text,
+                                    Style::default().bg(Color::Yellow).fg(Color::White),
+                                )
+                            } else {
+                                Span::from(byte_text)
+                            }
+                        })
+                        .collect::<Vec<Span<'_>>>(),
+                );
+
+                //         .into_iter()
+                //         .skip(0x100)
+                //         .take(0x100)
+                //         .map(|byte| Line::from(format!("{:02X}", byte)))
+                //         .collect::<Vec<Line<'_>>>(),
+                // );
+
+                let stack = Paragraph::new(stack_text).wrap(Wrap { trim: true }).block(
+                    Block::default()
+                        .title("stack")
+                        .padding(Padding::uniform(1))
+                        .borders(Borders::ALL),
+                );
 
                 // Display memory as rows of 8 bytes indexed by address
                 let mem_text = Text::from(
@@ -389,7 +465,7 @@ impl Debugger {
 
                 frame.render_widget(status, left_layout[0]);
                 frame.render_widget(trace, left_layout[1]);
-                frame.render_widget(display, right_layout[0]);
+                frame.render_widget(stack, right_layout[0]);
                 frame.render_widget(mem, right_layout[1]);
                 frame.render_widget(command, outer_layout[1]);
             })?;
@@ -400,7 +476,7 @@ impl Debugger {
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('q') {
                         break;
                     } else if key.kind == event::KeyEventKind::Press
-                        && key.code == KeyCode::Char(' ')
+                        && key.code == KeyCode::Char('n')
                     {
                         self.step();
                     } else if key.kind == event::KeyEventKind::Press
@@ -412,7 +488,7 @@ impl Debugger {
                     {
                         self.run();
                     } else if key.kind == event::KeyEventKind::Press
-                        && key.code == KeyCode::Char('p')
+                        && key.code == KeyCode::Char('s')
                     {
                         self.pause();
                     }
@@ -435,16 +511,25 @@ impl IO for Debugger {
     }
 }
 
+use clap::Parser;
+
+/// 6502 CPU Emulator and Debugger 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    file: Option<PathBuf>,
+}
+
 pub fn main() {
-    let arg = env::args().nth(2);
-    let rom = if let Some(arg) = arg {
+    let args: Args = Args::parse();
+    let rom = if let Some(arg) = args.file {
         fs::read(arg).expect("Usage: debugger [FILENAME]")
     } else {
         // vec![
         //     0xa9, 0x00, 0xa2, 0x08, 0x4e, 0x34, 0x12, 0x90, 0x04, 0x18, 0x6d, 0xff, 0xff, 0x6a,
         //     0x6e, 0x34, 0x12, 0xca, 0xd0, 0xf3, 0x8d, 0x12, 0x34, 0xad, 0x34, 0x12, 0x60,
         // ]
-        // vec![
+        // : Option<String>vec![
         //     0xa9, 0x01, 0x8d, 0x00, 0x02, 0xa9, 0x05, 0x8d, 0x01, 0x02, 0xa9, 0x08, 0x8d, 0x02, 0x02
         // ]
         // vec![0xa9, 0x01, 0xa2, 0x00, 0x9d, 0x00, 0x02, 0xe8, 0x10, 0xfa]

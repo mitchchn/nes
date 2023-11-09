@@ -5,7 +5,7 @@ use crate::mem::Memory;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 
 const DEBUG: bool = false;
 
@@ -484,7 +484,6 @@ pub const INSTRUCTIONS: [Instruction; 256] = [
 
 pub struct CPU6502 {
     mem: Arc<Mutex<dyn IO + Send>>,
-
     /// Program counter
     pub pc: u16,
     /// Accmulator
@@ -647,21 +646,21 @@ impl CPU6502 {
 
     pub fn decode_instruction(&mut self) -> String {
         if let Some(instruction) = self.instruction {
-        let formatted_operand = match instruction.1.1 {
-            Mode::IMP => "".to_string(),
-            Mode::IMM => format!("#${:02X}", self.read(self.op_addr)),
-            Mode::ACC => "A".to_string(),
-            Mode::ABS => format!("${:04X}", self.op_addr),
-            Mode::ABX => format!("${:04X},X", self.op_addr),
-            Mode::ABY => format!("${:04X},Y", self.op_addr),
-            Mode::ZPG => format!("${:02X}", self.op_addr),
-            Mode::ZPX => format!("${:02X},X", self.op_addr),
-            Mode::ZPY => format!("${:02X},Y", self.op_addr),
-            Mode::ZIX => format!("(${:02X},X)", self.op_addr),
-            Mode::ZIY => format!("(${:02X},Y)", self.op_addr),
-            Mode::IND => format!("(${:04X})", self.op_addr),
-            Mode::REL => format!("${:04X}", self.op_addr),
-        };
+            let formatted_operand = match instruction.1 .1 {
+                Mode::IMP => "".to_string(),
+                Mode::IMM => format!("#${:02X}", self.read(self.op_addr)),
+                Mode::ACC => "A".to_string(),
+                Mode::ABS => format!("${:04X}", self.op_addr),
+                Mode::ABX => format!("${:04X},X", self.op_addr),
+                Mode::ABY => format!("${:04X},Y", self.op_addr),
+                Mode::ZPG => format!("${:02X}", self.op_addr),
+                Mode::ZPX => format!("${:02X},X", self.op_addr),
+                Mode::ZPY => format!("${:02X},Y", self.op_addr),
+                Mode::ZIX => format!("(${:02X},X)", self.op_addr),
+                Mode::ZIY => format!("(${:02X},Y)", self.op_addr),
+                Mode::IND => format!("(${:04X})", self.op_addr),
+                Mode::REL => format!("${:04X}", self.op_addr),
+            };
             format!("{:#?} {}", instruction.1, &formatted_operand)
         } else {
             "".to_string()
@@ -821,10 +820,7 @@ impl CPU6502 {
     /// XXX - Illegal Instruction
     ///
     fn xxx(&mut self) {
-        dbg!(
-            "XXX - Illegal Instruction: ({})",
-            self.instruction
-        );
+        dbg!("XXX - Illegal Instruction: ({})", self.instruction);
     }
 
     /// ADC - Add with Carry
@@ -959,7 +955,7 @@ impl CPU6502 {
         let ror_value = self.ror_(byte);
         self.write(self.op_addr, ror_value);
 
-        self.set_arithmetic_status(byte);
+        self.set_arithmetic_status(ror_value);
     }
 
     fn ror_a(&mut self) {
@@ -1007,16 +1003,16 @@ impl CPU6502 {
         self.add_a_(acc, op);
     }
 
-    fn add_a_(&mut self, acc: u8, val: u8) {
-        let carry_bit = (self.p & Status::C).bits();
-        let result = acc.wrapping_add(val).wrapping_add(carry_bit);
-        self.a = result;
+    #[inline]
+    fn add_a_(&mut self, a: u8, m: u8) {
+        let c = (self.p & Status::C).bits();
+        let sum: u16 = (a as u16) + (m as u16) + (c as u16);
 
-        // Set Carry flag
-        //
-        // Carry if MSB flipped.
-        // This could _either_ indicate a change of sign or an overflow.
-        self.p.set(Status::C, result < acc);
+        self.a = sum as u8;
+        
+        // Set carry flag if the sum exceeds 255, otherwise unset it
+        // (sum >> 8) == 1 is equivalent to sum > 0xFF
+        self.p.set(Status::C, (sum >> 8) == 1);
 
         // Set Overflow flag
         //
@@ -1024,7 +1020,7 @@ impl CPU6502 {
         // adding two values with the same sign (P + P or N + N).
         self.p.set(
             Status::V,
-            result & 0x80 != acc & 0x80 && result & 0x80 != val & 0x80,
+            self.a & 0x80 != a & 0x80 && self.a & 0x80 != m & 0x80,
         );
 
         self.set_arithmetic_status(self.a);
@@ -1151,7 +1147,7 @@ impl CPU6502 {
     /// M+1 -> M,N,Z
     fn inc(&mut self) {
         let m = self.read(self.op_addr);
-        let result = m + 1;
+        let result = m.wrapping_add(1);
         self.write(self.op_addr, result);
         self.set_arithmetic_status(result);
     }
@@ -1317,6 +1313,9 @@ impl CPU6502 {
         self.p = Status::from_bits(self.pop_stack()).expect("Could not restore status register")
             & !(Status::B)
             | Status::U;
+
+        // self.p = Status::from_bits(self.pop_stack()).expect("Could not restore status register")
+        //     | (Status::B | Status::U);
     }
 
     /// SEC - Set Carry
@@ -1391,7 +1390,6 @@ impl CPU6502 {
     /// X -> SP
     fn txs(&mut self) {
         self.sp = self.x;
-        self.set_arithmetic_status(self.sp);
     }
 
     /// TXA - Transfer Y to Accumulator
@@ -1488,16 +1486,16 @@ impl CPU6502 {
     }
 
     fn pop_stack(&mut self) -> u8 {
-        let stkp = STACK + (self.sp as u16);
-        let byte = self.read(stkp + 1);
-
         self.sp = self.sp.wrapping_add(1);
+
+        let stkp = STACK + (self.sp as u16);
+        let byte = self.read(stkp);
 
         byte
     }
 }
 
-impl IO  for CPU6502 {
+impl IO for CPU6502 {
     fn read(&mut self, addr: u16) -> u8 {
         self.mem.lock().unwrap().read(addr)
     }
