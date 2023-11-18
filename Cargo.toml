@@ -9,7 +9,7 @@ name="nes"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "debugger"
+name = "cli"
 
 [profile.dev]
 opt-level = 1
@@ -40,3 +40,5 @@ ratatui = "0.24.0"
 crossterm = "0.27.0"
 sdl2 = "0.35.2"
 clap = { version = "4.4.7", features = ["derive"] }
+parking_lot = "0.12.1"
+parking_lot_core = "0.9.9"

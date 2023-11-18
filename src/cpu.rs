@@ -5,7 +5,8 @@ use crate::mem::Memory;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
+use parking_lot::Mutex;
 
 const DEBUG: bool = false;
 
@@ -829,7 +830,12 @@ impl CPU6502 {
         let acc = self.a;
         let op = self.read(self.op_addr);
 
-        self.add_a_(acc, op);
+        if !self.p.contains(Status::D) {
+            self.add_a_(acc, op);
+        } else {
+            self.add_dec_(acc, op);
+
+        }
     }
 
     /// AND - Logical And
@@ -985,12 +991,6 @@ impl CPU6502 {
         ror_value
     }
 
-    /// BRK - Break
-    ///
-    fn brk(&mut self) {
-        self.p.set(Status::B, true);
-        self.irq();
-    }
 
     /// SBC - Subtract with Carry
     ///
@@ -1006,6 +1006,31 @@ impl CPU6502 {
     #[inline]
     fn add_a_(&mut self, a: u8, m: u8) {
         let c = (self.p & Status::C).bits();
+        let sum: u16 = (a as u16) + (m as u16) + (c as u16);
+
+        self.a = sum as u8;
+        
+        // Set carry flag if the sum exceeds 255, otherwise unset it
+        // (sum >> 8) == 1 is equivalent to sum > 0xFF
+        self.p.set(Status::C, (sum >> 8) == 1);
+
+        // Set Overflow flag
+        //
+        // Indicate overflow to negate the N flag when
+        // adding two values with the same sign (P + P or N + N).
+        self.p.set(
+            Status::V,
+            self.a & 0x80 != a & 0x80 && self.a & 0x80 != m & 0x80,
+        );
+
+        self.set_arithmetic_status(self.a);
+    }
+
+    #[inline]
+    fn add_dec_(&mut self, a: u8, m: u8) {
+        let c = (self.p & Status::C).bits();
+
+        // 0x05
         let sum: u16 = (a as u16) + (m as u16) + (c as u16);
 
         self.a = sum as u8;
@@ -1399,6 +1424,15 @@ impl CPU6502 {
         self.set_arithmetic_status(self.a);
     }
 
+    /// BRK - Break
+    ///
+    fn brk(&mut self) {
+        self.p.set(Status::B, true);
+        self.pc += 1;
+
+        self.interrupt_(0xFFFE);
+    }
+
     //
     // End of operations
     //
@@ -1422,14 +1456,13 @@ impl CPU6502 {
     fn interrupt_(&mut self, vector_addr: u16) {
         // Push PC onto the stack
 
-        let pc_lo = (0x00FF & self.pc) as u8;
-        let pc_hi = ((0xFF00 & self.pc) >> 8) as u8;
+        let pc_hi = (self.pc >> 8) as u8;
+        let pc_lo = self.pc as u8;
+
 
         self.push_stack(pc_hi);
         self.push_stack(pc_lo);
-
-        // Push status register onto the stack (with clear B flag)
-        self.push_stack((self.p & !Status::B).bits());
+        self.push_stack((self.p).bits());
 
         // Set PC to address from vector
         let addr_lo = self.read(vector_addr) as u16;
@@ -1497,10 +1530,10 @@ impl CPU6502 {
 
 impl IO for CPU6502 {
     fn read(&mut self, addr: u16) -> u8 {
-        self.mem.lock().unwrap().read(addr)
+        self.mem.lock().read(addr)
     }
     fn write(&mut self, addr: u16, data: u8) {
-        self.mem.lock().unwrap().write(addr, data)
+        self.mem.lock().write(addr, data)
     }
 }
 
@@ -1525,7 +1558,7 @@ mod tests {
         c.write(0xFFFC, 0x34);
         c.write(0xFFFC + 1, 0x12);
 
-        assert_eq!(c.mem.lock().unwrap().read(0xFFFC), 0x34);
+        assert_eq!(c.mem.lock().read(0xFFFC), 0x34);
 
         c.reset();
 
@@ -1613,7 +1646,7 @@ mod tests {
 
         c.clock();
 
-        assert_eq!(c.mem.lock().unwrap().read(0xAB), 0x33);
+        assert_eq!(c.mem.lock().read(0xAB), 0x33);
     }
 
     #[test]

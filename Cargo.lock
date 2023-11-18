@@ -303,6 +303,8 @@ dependencies = [
  "clap",
  "colored",
  "crossterm",
+ "parking_lot",
+ "parking_lot_core",
  "ratatui",
  "rustasm6502",
  "sdl2",

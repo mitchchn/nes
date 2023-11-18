@@ -2,12 +2,15 @@ use wasm_bindgen::prelude::*;
 
 pub mod cpu;
 pub mod display;
+pub mod tui;
 pub mod io;
+pub mod debugger;
 // mod machine;
-// mod mapper;
+// pub mod mapper;
 pub mod mem;
 // mod rom;
-mod stdout;
+pub mod stdout;
+pub mod stdin;
 
 #[macro_use]
 extern crate bitflags;
