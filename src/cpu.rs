@@ -3,10 +3,10 @@ use colored::{ColoredString, Colorize};
 use crate::io::IO;
 use crate::mem::Memory;
 
+use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::{Arc};
-use parking_lot::Mutex;
+use std::sync::Arc;
 
 const DEBUG: bool = false;
 
@@ -95,7 +95,7 @@ pub enum Mode {
     ZIY,
     /// Relative
     ///
-    /// e.g. `BEQ $AAAA`
+    /// e.g. `BEQ $AAAA`adc_dec
     REL,
     /// Absolute Indirect
     ///
@@ -834,7 +834,6 @@ impl CPU6502 {
             self.add_a_(acc, op);
         } else {
             self.add_dec_(acc, op);
-
         }
     }
 
@@ -991,16 +990,26 @@ impl CPU6502 {
         ror_value
     }
 
-
     /// SBC - Subtract with Carry
     ///
     fn sbc(&mut self) {
         let acc = self.a;
-        // One's complement
-        // Don't add 1 since we're adding the carry bit.
-        let op = self.read(self.op_addr) ^ 0xFF;
 
-        self.add_a_(acc, op);
+        if !self.p.contains(Status::D) {
+            // One's complement
+            // Don't add 1 since we're adding the carry bit.
+            let op = self.read(self.op_addr) ^ 0xFF;
+            self.add_a_(acc, op);
+        } else {
+            // Nine's complement
+
+            let mut op = self.read(self.op_addr);
+            let op_lo = 9 - (op & 0xf);
+            let op_hi = 9 - (op >> 4);
+            op = (op_hi << 4) | op_lo;
+
+            self.add_dec_(acc, op);
+        }
     }
 
     #[inline]
@@ -1009,7 +1018,7 @@ impl CPU6502 {
         let sum: u16 = (a as u16) + (m as u16) + (c as u16);
 
         self.a = sum as u8;
-        
+
         // Set carry flag if the sum exceeds 255, otherwise unset it
         // (sum >> 8) == 1 is equivalent to sum > 0xFF
         self.p.set(Status::C, (sum >> 8) == 1);
@@ -1028,16 +1037,30 @@ impl CPU6502 {
 
     #[inline]
     fn add_dec_(&mut self, a: u8, m: u8) {
+        // BCD stores two digits (0-9) in a byte
+        // Sum hi and lo digits separately, then combine
+
+        // If the sum of the lo-bit digits (plus carry) exceeds 9, add 0x6 to skip the base-16 values.
+        // Carry the 1 to the hi-bit digit
         let c = (self.p & Status::C).bits();
+        let mut lo_carry = 0;
+        let mut lo_sum: u8 = (a & 0xF) + (m & 0xF) + c;
+        if lo_sum > 9 {
+            lo_sum += 0x6;
+            lo_carry = 0x1;
+        }
 
-        // 0x05
-        let sum: u16 = (a as u16) + (m as u16) + (c as u16);
+        // If the sum of the hi-bit digits (plus lo-bit carry) exceeds 9, wrap around.
+        let mut hi_sum: u8 = (a >> 4) + (m >> 4) + lo_carry;
+        if hi_sum > 9 {
+            hi_sum -= 10;
+            self.p.set(Status::C, true);
+        } else {
+            self.p.set(Status::C, false);
+        }
 
-        self.a = sum as u8;
-        
-        // Set carry flag if the sum exceeds 255, otherwise unset it
-        // (sum >> 8) == 1 is equivalent to sum > 0xFF
-        self.p.set(Status::C, (sum >> 8) == 1);
+        let sum: u8 = (hi_sum << 4) | (lo_sum & 0xF);
+        self.a = sum;
 
         // Set Overflow flag
         //
@@ -1459,7 +1482,6 @@ impl CPU6502 {
         let pc_hi = (self.pc >> 8) as u8;
         let pc_lo = self.pc as u8;
 
-
         self.push_stack(pc_hi);
         self.push_stack(pc_lo);
         self.push_stack((self.p).bits());
@@ -1471,7 +1493,6 @@ impl CPU6502 {
 
         // Set I flag
         self.p.set(Status::I, true);
-
         self.pc = addr;
     }
 

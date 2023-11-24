@@ -142,8 +142,16 @@ impl Debugger {
         cpu.reset();
         cpu.pc = 0x0400;
         self.breakpoints = vec![
-            // success!
-            0x336D,
+            // dec mode success
+            0x3469,
+            // non-dec success/dec mode start!
+            // 0x336D,
+            // 0x346f,
+            // 0x3484,
+            // 0x3479,
+            // 0x3470,
+            // decimal mode adc/sbc
+            // 0x346F  
         ]
         // cpu.pc = 0x3387;
         // cpu.pc = 0x331C;
