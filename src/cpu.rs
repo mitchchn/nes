@@ -687,22 +687,26 @@ impl CPU6502 {
     //
 
     /// Implied
+    #[inline]
     fn imp(&mut self) -> bool {
         false
     }
 
     // Accumulator
+    #[inline]
     fn acc(&mut self) -> bool {
         false
     }
 
     /// Absolute
+    #[inline]
     fn abs(&mut self) -> bool {
         self.op_addr = self.pop_u16();
         false
     }
 
     // Immediate
+    #[inline]
     fn imm(&mut self) -> bool {
         let addr = self.pc;
         self.pc += 1;
@@ -711,6 +715,7 @@ impl CPU6502 {
     }
 
     /// Absolute Indirect
+    #[inline]
     fn ind(&mut self) -> bool {
         let addr_ptr = self.pop_u16();
 
@@ -723,6 +728,7 @@ impl CPU6502 {
     }
 
     /// Zero Page
+    #[inline]
     fn zpg(&mut self) -> bool {
         let lo = self.pop_u8();
         let addr = 0x0000 | (lo as u16);
@@ -732,6 +738,7 @@ impl CPU6502 {
     }
 
     /// Zero Page, X-Indexed
+    #[inline]
     fn zpx(&mut self) -> bool {
         let lo = self.pop_u8();
         // No carry:
@@ -745,6 +752,7 @@ impl CPU6502 {
     }
 
     /// Zero Page, Y-Indexed
+    #[inline]
     fn zpy(&mut self) -> bool {
         let lo = self.pop_u8();
         // No carry:
@@ -758,6 +766,7 @@ impl CPU6502 {
     }
 
     /// Absolute, X-Indexed
+    #[inline]
     fn abx(&mut self) -> bool {
         self.abs();
         let abs_addr = self.op_addr;
@@ -770,6 +779,7 @@ impl CPU6502 {
     }
 
     /// Absolute, Y-Indexed
+    #[inline]
     fn aby(&mut self) -> bool {
         self.abs();
         let abs_addr = self.op_addr;
@@ -782,6 +792,7 @@ impl CPU6502 {
     }
 
     /// Relative
+    #[inline]
     fn rel(&mut self) -> bool {
         // offset is a 1-byte signed value:
         //
@@ -810,6 +821,7 @@ impl CPU6502 {
     /// Operand is zero page address.
     /// Absolute address is word in (OP + X, OP + X + 1).
     /// No carry.
+    #[inline]
     fn zix(&mut self) -> bool {
         let ptr_lo = self.pop_u8();
         let ptr_lo_idx = ptr_lo.wrapping_add(self.x);
@@ -827,6 +839,7 @@ impl CPU6502 {
     ///
     /// Operand is zero page address.
     /// Absolute address is word in (OP, OP + 1) offset by Y.
+    #[inline]
     fn ziy(&mut self) -> bool {
         self.zpg();
         let ptr = self.op_addr;

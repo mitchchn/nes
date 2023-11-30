@@ -1,7 +1,3 @@
-#![feature(generic_const_items)]
-
-use wasm_bindgen::prelude::*;
-
 pub mod cpu;
 pub mod display;
 pub mod tui;
