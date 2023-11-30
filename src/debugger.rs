@@ -4,48 +4,24 @@ use std::{
         Arc,
     },
     thread::{self, JoinHandle},
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 
 use parking_lot::Mutex;
 
 use crate::{
+    bus::Bus,
     cpu::{Mode, CPU6502, INSTRUCTIONS},
+    display::Display,
     io::IO,
     mem::Memory,
+    serial::Serial,
     stdin::Stdin,
     stdout::Stdout,
 };
 
 pub enum CpuMessage {
     Pause,
-}
-
-pub struct Bus {
-    pub mem: Memory,
-    pub stdout: Stdout,
-    pub stdin: Stdin,
-}
-
-impl IO for Bus {
-    fn read(&mut self, addr: u16) -> u8 {
-        if addr >= 0xB001 && addr < 0xB400 {
-            self.stdin.read(addr - 0xB001)
-        } else {
-            self.mem.read(addr)
-        }
-    }
-    fn write(&mut self, addr: u16, data: u8) {
-        if addr >= 0xA000 && addr < 0xA400 {
-            // println!("hi!")
-            self.stdout.write(addr - 0xA000, data);
-            self.stdout.flush();
-        } else if addr == 0xB000 {
-            self.stdin.write(0, 0);
-        } else {
-            self.mem.write(addr, data);
-        }
-    }
 }
 
 static HALT: AtomicBool = AtomicBool::new(true);
@@ -55,8 +31,9 @@ pub struct Debugger {
     pub bus: Arc<Mutex<Bus>>,
     pub instruction_log: Vec<(u16, String)>,
     pub breakpoints: Vec<u16>,
-    pub clock_speed: Option<usize>,
+    pub clock_speed: Option<u64>,
     pub non_interactive_mode: bool,
+    pub max_speed: bool,
 }
 
 impl Debugger {
@@ -64,8 +41,16 @@ impl Debugger {
         let mem = Memory::new();
         let stdout = Stdout::new();
         let stdin = Stdin::new();
+        let display = Display::new();
+        let serial = Serial::new("/tmp/vserial0").expect("Could not open serial port");
 
-        let bus = Arc::new(Mutex::new(Bus { mem, stdout, stdin }));
+        let bus = Arc::new(Mutex::new(Bus {
+            mem,
+            stdout,
+            stdin,
+            display,
+            serial,
+        }));
 
         let cpu = Arc::new(Mutex::new(CPU6502::new(bus.clone())));
 
@@ -74,8 +59,9 @@ impl Debugger {
             bus,
             instruction_log: vec![],
             breakpoints: vec![],
-            clock_speed: None,
+            clock_speed: Some(2_000_000),
             non_interactive_mode: false,
+            max_speed: false,
         };
         m
     }
@@ -140,7 +126,6 @@ impl Debugger {
         let mut cpu = self.cpu.lock();
 
         cpu.reset();
-        cpu.pc = 0x0400;
         self.breakpoints = vec![
             // dec mode success
             0x3469,
@@ -151,11 +136,15 @@ impl Debugger {
             // 0x3479,
             // 0x3470,
             // decimal mode adc/sbc
-            // 0x346F  
+            // 0x346F
         ]
         // cpu.pc = 0x3387;
         // cpu.pc = 0x331C;
         // cpu.pc = 0x36AD;
+    }
+
+    pub fn show(&mut self) {
+        self.bus.lock().display.show();
     }
 
     pub fn pause(&mut self) {
@@ -167,45 +156,45 @@ impl Debugger {
 
         let cpu = self.cpu.clone();
         let breakpoints = self.breakpoints.clone();
-        let ns_per_clock = if let Some(clock_speed) = self.clock_speed {
-            1_000_000_000 / (clock_speed * 1_000_000)
-        } else {
-            0
-        };
-        let cycle_length: Duration = Duration::from_nanos(ns_per_clock as u64);
+        let clock_speed: u64 = self.clock_speed.unwrap_or(1_000_000);
+
+        let target_fps = 60;
+        let cycles_per_interval = clock_speed / target_fps;
+        let ns_per_interval: u64 = 1_000_000_000 / target_fps;
+        let max_speed = self.max_speed;
 
         let cpu_thread = thread::spawn(move || {
-            // let mut cpu = CPU6502::new(mem);
-            // cpu.pc = 0x400;
+            let mut cycles_since_last_interval = 0;
+            let mut time_to_next_interval = Instant::now() + Duration::from_nanos(ns_per_interval);
 
             'running: loop {
-                if !HALT.load(Ordering::Relaxed) {
-                    let mut cpu = cpu.lock();
-                    cpu.clock();
-
-                    // Run checks only after completing an instruction, otherwise keep cycling
-                    // TODO: once sub-cycle emulation is implemented, continue full loop and yield thread on each cycle
-                    while cpu.cycles_left > 0 {
-                        if !cycle_length.is_zero() {
-                            // Spinwait
-                            let cycle_start = SystemTime::now();
-                            while SystemTime::now()
-                                .duration_since(cycle_start)
-                                .unwrap_or(cycle_length)
-                                < cycle_length
-                            {
-                                // std::hint::spin_loop();
-                            }
-                        }
-                        cpu.clock();
-                    }
-
-                    // check breakpoints
-                    if breakpoints.contains(&cpu.pc) {
-                        HALT.store(true, Ordering::Relaxed);
-                    }
-                } else {
+                if HALT.load(Ordering::Relaxed) {
                     break 'running;
+                }
+
+                let mut cpu = cpu.lock();
+                cpu.clock();
+                cycles_since_last_interval += 1;
+                while cpu.cycles_left > 0 {
+                    cpu.clock();
+                    cycles_since_last_interval += 1;
+                }
+
+
+                // check breakpoints
+                if breakpoints.contains(&cpu.pc) {
+                    HALT.store(true, Ordering::Relaxed);
+                }
+
+                // Run at target FPS by waiting the remaining time in a frame/interval
+                if !max_speed && cycles_since_last_interval > cycles_per_interval {
+                    let time_left_in_interval = time_to_next_interval - Instant::now();
+                    if time_left_in_interval.as_nanos() > 0 {
+                        thread::sleep(time_left_in_interval);
+                    }
+
+                    cycles_since_last_interval = 0;
+                    time_to_next_interval = Instant::now() + Duration::from_nanos(ns_per_interval);
                 }
             }
         });

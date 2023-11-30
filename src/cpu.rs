@@ -3,8 +3,9 @@ use colored::{ColoredString, Colorize};
 use crate::io::IO;
 use crate::mem::Memory;
 
-use parking_lot::Mutex;
+use parking_lot::{Mutex};
 use std::cell::RefCell;
+use std::mem::MaybeUninit;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -222,265 +223,265 @@ pub enum Opcode {
     XXX,
 }
 
-pub type Instruction = (Opcode, Mode, u8, fn(&mut CPU6502));
+pub type Instruction = (Opcode, Mode, u8, bool, fn(&mut CPU6502), fn(&mut CPU6502) -> bool);
 
 pub const INSTRUCTIONS: [Instruction; 256] = [
-    (Opcode::BRK, Mode::IMP, 7, CPU6502::brk),
-    (Opcode::ORA, Mode::ZIX, 6, CPU6502::ora),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 3, CPU6502::nop),
-    (Opcode::ORA, Mode::ZPG, 3, CPU6502::ora),
-    (Opcode::ASL, Mode::ZPG, 5, CPU6502::asl),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::PHP, Mode::IMP, 3, CPU6502::php),
-    (Opcode::ORA, Mode::IMM, 2, CPU6502::ora),
-    (Opcode::ASL, Mode::ACC, 2, CPU6502::asl_a),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::ORA, Mode::ABS, 4, CPU6502::ora),
-    (Opcode::ASL, Mode::ABS, 6, CPU6502::asl),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::BPL, Mode::REL, 2, CPU6502::bpl),
-    (Opcode::ORA, Mode::ZIY, 5, CPU6502::ora),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::ORA, Mode::ZPX, 4, CPU6502::ora),
-    (Opcode::ASL, Mode::ZPX, 6, CPU6502::asl),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::CLC, Mode::IMP, 2, CPU6502::clc),
-    (Opcode::ORA, Mode::ABY, 4, CPU6502::ora),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::ORA, Mode::ABX, 4, CPU6502::ora),
-    (Opcode::ASL, Mode::ABX, 7, CPU6502::asl),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::JSR, Mode::ABS, 6, CPU6502::jsr),
-    (Opcode::AND, Mode::ZIX, 6, CPU6502::and),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::BIT, Mode::ZPG, 3, CPU6502::bit),
-    (Opcode::AND, Mode::ZPG, 3, CPU6502::and),
-    (Opcode::ROL, Mode::ZPG, 5, CPU6502::rol),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::PLP, Mode::IMP, 4, CPU6502::plp),
-    (Opcode::AND, Mode::IMM, 2, CPU6502::and),
-    (Opcode::ROL, Mode::ACC, 2, CPU6502::rol_a),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::BIT, Mode::ABS, 4, CPU6502::bit),
-    (Opcode::AND, Mode::ABS, 4, CPU6502::and),
-    (Opcode::ROL, Mode::ABS, 6, CPU6502::rol),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::BMI, Mode::REL, 2, CPU6502::bmi),
-    (Opcode::AND, Mode::ZIY, 5, CPU6502::and),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::AND, Mode::ZPX, 4, CPU6502::and),
-    (Opcode::ROL, Mode::ZPX, 6, CPU6502::rol),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::SEC, Mode::IMP, 2, CPU6502::sec),
-    (Opcode::AND, Mode::ABY, 4, CPU6502::and),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::AND, Mode::ABX, 4, CPU6502::and),
-    (Opcode::ROL, Mode::ABX, 7, CPU6502::rol),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::RTI, Mode::IMP, 6, CPU6502::rti),
-    (Opcode::EOR, Mode::ZIX, 6, CPU6502::eor),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 3, CPU6502::nop),
-    (Opcode::EOR, Mode::ZPG, 3, CPU6502::eor),
-    (Opcode::LSR, Mode::ZPG, 5, CPU6502::lsr),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::PHA, Mode::IMP, 3, CPU6502::pha),
-    (Opcode::EOR, Mode::IMM, 2, CPU6502::eor),
-    (Opcode::LSR, Mode::ACC, 2, CPU6502::lsr_a),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::JMP, Mode::ABS, 3, CPU6502::jmp),
-    (Opcode::EOR, Mode::ABS, 4, CPU6502::eor),
-    (Opcode::LSR, Mode::ABS, 6, CPU6502::lsr),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::BVC, Mode::REL, 2, CPU6502::bvc),
-    (Opcode::EOR, Mode::ZIY, 5, CPU6502::eor),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::EOR, Mode::ZPX, 4, CPU6502::eor),
-    (Opcode::LSR, Mode::ZPX, 6, CPU6502::lsr),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::CLI, Mode::IMP, 2, CPU6502::cli),
-    (Opcode::EOR, Mode::ABY, 4, CPU6502::eor),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::EOR, Mode::ABX, 4, CPU6502::eor),
-    (Opcode::LSR, Mode::ABX, 7, CPU6502::lsr),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::RTS, Mode::IMP, 6, CPU6502::rts),
-    (Opcode::ADC, Mode::ZIX, 6, CPU6502::adc),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 3, CPU6502::nop),
-    (Opcode::ADC, Mode::ZPG, 3, CPU6502::adc),
-    (Opcode::ROR, Mode::ZPG, 5, CPU6502::ror),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::PLA, Mode::IMP, 4, CPU6502::pla),
-    (Opcode::ADC, Mode::IMM, 2, CPU6502::adc),
-    (Opcode::ROR, Mode::ACC, 2, CPU6502::ror_a),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::JMP, Mode::IND, 5, CPU6502::jmp),
-    (Opcode::ADC, Mode::ABS, 4, CPU6502::adc),
-    (Opcode::ROR, Mode::ABS, 6, CPU6502::ror),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::BVS, Mode::REL, 2, CPU6502::bvs),
-    (Opcode::ADC, Mode::ZIY, 5, CPU6502::adc),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::ADC, Mode::ZPX, 4, CPU6502::adc),
-    (Opcode::ROR, Mode::ZPX, 6, CPU6502::ror),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::SEI, Mode::IMP, 2, CPU6502::sei),
-    (Opcode::ADC, Mode::ABY, 4, CPU6502::adc),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::ADC, Mode::ABX, 4, CPU6502::adc),
-    (Opcode::ROR, Mode::ABX, 7, CPU6502::ror),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::STA, Mode::ZIX, 6, CPU6502::sta),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::STY, Mode::ZPG, 3, CPU6502::sty),
-    (Opcode::STA, Mode::ZPG, 3, CPU6502::sta),
-    (Opcode::STX, Mode::ZPG, 3, CPU6502::stx),
-    (Opcode::XXX, Mode::IMP, 3, CPU6502::xxx),
-    (Opcode::DEY, Mode::IMP, 2, CPU6502::dey),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::TXA, Mode::IMP, 2, CPU6502::txa),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::STY, Mode::ABS, 4, CPU6502::sty),
-    (Opcode::STA, Mode::ABS, 4, CPU6502::sta),
-    (Opcode::STX, Mode::ABS, 4, CPU6502::stx),
-    (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::BCC, Mode::REL, 2, CPU6502::bcc),
-    (Opcode::STA, Mode::ZIY, 6, CPU6502::sta),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::STY, Mode::ZPX, 4, CPU6502::sty),
-    (Opcode::STA, Mode::ZPX, 4, CPU6502::sta),
-    (Opcode::STX, Mode::ZPY, 4, CPU6502::stx),
-    (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::TYA, Mode::IMP, 2, CPU6502::tya),
-    (Opcode::STA, Mode::ABY, 5, CPU6502::sta),
-    (Opcode::TXS, Mode::IMP, 2, CPU6502::txs),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 5, CPU6502::nop),
-    (Opcode::STA, Mode::ABX, 5, CPU6502::sta),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::LDY, Mode::IMM, 2, CPU6502::ldy),
-    (Opcode::LDA, Mode::ZIX, 6, CPU6502::lda),
-    (Opcode::LDX, Mode::IMM, 2, CPU6502::ldx),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::LDY, Mode::ZPG, 3, CPU6502::ldy),
-    (Opcode::LDA, Mode::ZPG, 3, CPU6502::lda),
-    (Opcode::LDX, Mode::ZPG, 3, CPU6502::ldx),
-    (Opcode::XXX, Mode::IMP, 3, CPU6502::xxx),
-    (Opcode::TAY, Mode::IMP, 2, CPU6502::tay),
-    (Opcode::LDA, Mode::IMM, 2, CPU6502::lda),
-    (Opcode::TAX, Mode::IMP, 2, CPU6502::tax),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::LDY, Mode::ABS, 4, CPU6502::ldy),
-    (Opcode::LDA, Mode::ABS, 4, CPU6502::lda),
-    (Opcode::LDX, Mode::ABS, 4, CPU6502::ldx),
-    (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::BCS, Mode::REL, 2, CPU6502::bcs),
-    (Opcode::LDA, Mode::ZIY, 5, CPU6502::lda),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::LDY, Mode::ZPX, 4, CPU6502::ldy),
-    (Opcode::LDA, Mode::ZPX, 4, CPU6502::lda),
-    (Opcode::LDX, Mode::ZPY, 4, CPU6502::ldx),
-    (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::CLV, Mode::IMP, 2, CPU6502::clv),
-    (Opcode::LDA, Mode::ABY, 4, CPU6502::lda),
-    (Opcode::TSX, Mode::IMP, 2, CPU6502::tsx),
-    (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::LDY, Mode::ABX, 4, CPU6502::ldy),
-    (Opcode::LDA, Mode::ABX, 4, CPU6502::lda),
-    (Opcode::LDX, Mode::ABY, 4, CPU6502::ldx),
-    (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::CPY, Mode::IMM, 2, CPU6502::cpy),
-    (Opcode::CMP, Mode::ZIX, 6, CPU6502::cmp),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::CPY, Mode::ZPG, 3, CPU6502::cpy),
-    (Opcode::CMP, Mode::ZPG, 3, CPU6502::cmp),
-    (Opcode::DEC, Mode::ZPG, 5, CPU6502::dec),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::INY, Mode::IMP, 2, CPU6502::iny),
-    (Opcode::CMP, Mode::IMM, 2, CPU6502::cmp),
-    (Opcode::DEX, Mode::IMP, 2, CPU6502::dex),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::CPY, Mode::ABS, 4, CPU6502::cpy),
-    (Opcode::CMP, Mode::ABS, 4, CPU6502::cmp),
-    (Opcode::DEC, Mode::ABS, 6, CPU6502::dec),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::BNE, Mode::REL, 2, CPU6502::bne),
-    (Opcode::CMP, Mode::ZIY, 5, CPU6502::cmp),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::CMP, Mode::ZPX, 4, CPU6502::cmp),
-    (Opcode::DEC, Mode::ZPX, 6, CPU6502::dec),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::CLD, Mode::IMP, 2, CPU6502::cld),
-    (Opcode::CMP, Mode::ABY, 4, CPU6502::cmp),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::CMP, Mode::ABX, 4, CPU6502::cmp),
-    (Opcode::DEC, Mode::ABX, 7, CPU6502::dec),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::CPX, Mode::IMM, 2, CPU6502::cpx),
-    (Opcode::SBC, Mode::ZIX, 6, CPU6502::sbc),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::CPX, Mode::ZPG, 3, CPU6502::cpx),
-    (Opcode::SBC, Mode::ZPG, 3, CPU6502::sbc),
-    (Opcode::INC, Mode::ZPG, 5, CPU6502::inc),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::INX, Mode::IMP, 2, CPU6502::inx),
-    (Opcode::SBC, Mode::IMM, 2, CPU6502::sbc),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::SBC, Mode::IMP, 2, CPU6502::sbc),
-    (Opcode::CPX, Mode::ABS, 4, CPU6502::cpx),
-    (Opcode::SBC, Mode::ABS, 4, CPU6502::sbc),
-    (Opcode::INC, Mode::ABS, 6, CPU6502::inc),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::BEQ, Mode::REL, 2, CPU6502::beq),
-    (Opcode::SBC, Mode::ZIY, 5, CPU6502::sbc),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::SBC, Mode::ZPX, 4, CPU6502::sbc),
-    (Opcode::INC, Mode::ZPX, 6, CPU6502::inc),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::SED, Mode::IMP, 2, CPU6502::sed),
-    (Opcode::SBC, Mode::ABY, 4, CPU6502::sbc),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::SBC, Mode::ABX, 4, CPU6502::sbc),
-    (Opcode::INC, Mode::ABX, 7, CPU6502::inc),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
+    (Opcode::BRK, Mode::IMP, 7, false, CPU6502::brk, CPU6502::imp),
+    (Opcode::ORA, Mode::ZIX, 6, false, CPU6502::ora, CPU6502::zix),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 8, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 3, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::ORA, Mode::ZPG, 3, false, CPU6502::ora, CPU6502::zpg),
+    (Opcode::ASL, Mode::ZPG, 5, false, CPU6502::asl, CPU6502::zpg),
+    (Opcode::XXX, Mode::IMP, 5, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::PHP, Mode::IMP, 3, false, CPU6502::php, CPU6502::imp),
+    (Opcode::ORA, Mode::IMM, 2, false, CPU6502::ora, CPU6502::imm),
+    (Opcode::ASL, Mode::ACC, 2, false, CPU6502::asl_a, CPU6502::acc),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::ORA, Mode::ABS, 4, false, CPU6502::ora, CPU6502::abs),
+    (Opcode::ASL, Mode::ABS, 6, false, CPU6502::asl, CPU6502::abs),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::BPL, Mode::REL, 2, false, CPU6502::bpl, CPU6502::rel),
+    (Opcode::ORA, Mode::ZIY, 5, true, CPU6502::ora, CPU6502::ziy),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 8, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::ORA, Mode::ZPX, 4, false, CPU6502::ora, CPU6502::zpx),
+    (Opcode::ASL, Mode::ZPX, 6, false, CPU6502::asl, CPU6502::zpx),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::CLC, Mode::IMP, 2, false, CPU6502::clc, CPU6502::imp),
+    (Opcode::ORA, Mode::ABY, 4, true, CPU6502::ora, CPU6502::aby),
+    (Opcode::NOP, Mode::IMP, 2, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 7, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::ORA, Mode::ABX, 4, true, CPU6502::ora, CPU6502::abx),
+    (Opcode::ASL, Mode::ABX, 7, false, CPU6502::asl, CPU6502::abx),
+    (Opcode::XXX, Mode::IMP, 7, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::JSR, Mode::ABS, 6, false, CPU6502::jsr, CPU6502::abs),
+    (Opcode::AND, Mode::ZIX, 6, false, CPU6502::and, CPU6502::zix),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 8, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::BIT, Mode::ZPG, 3, false, CPU6502::bit, CPU6502::zpg),
+    (Opcode::AND, Mode::ZPG, 3, false, CPU6502::and, CPU6502::zpg),
+    (Opcode::ROL, Mode::ZPG, 5, false, CPU6502::rol, CPU6502::zpg),
+    (Opcode::XXX, Mode::IMP, 5, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::PLP, Mode::IMP, 4, false, CPU6502::plp, CPU6502::imp),
+    (Opcode::AND, Mode::IMM, 2, false, CPU6502::and, CPU6502::imm),
+    (Opcode::ROL, Mode::ACC, 2, false, CPU6502::rol_a, CPU6502::acc),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::BIT, Mode::ABS, 4, false, CPU6502::bit, CPU6502::abs),
+    (Opcode::AND, Mode::ABS, 4, false, CPU6502::and, CPU6502::abs),
+    (Opcode::ROL, Mode::ABS, 6, false, CPU6502::rol, CPU6502::abs),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::BMI, Mode::REL, 2, false, CPU6502::bmi, CPU6502::rel),
+    (Opcode::AND, Mode::ZIY, 5, true, CPU6502::and, CPU6502::ziy),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 8, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::AND, Mode::ZPX, 4, false, CPU6502::and, CPU6502::zpx),
+    (Opcode::ROL, Mode::ZPX, 6, false, CPU6502::rol, CPU6502::zpx),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::SEC, Mode::IMP, 2, false, CPU6502::sec, CPU6502::imp),
+    (Opcode::AND, Mode::ABY, 4, true, CPU6502::and, CPU6502::aby),
+    (Opcode::NOP, Mode::IMP, 2, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 7, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::AND, Mode::ABX, 4, true, CPU6502::and, CPU6502::abx),
+    (Opcode::ROL, Mode::ABX, 7, false, CPU6502::rol, CPU6502::abx),
+    (Opcode::XXX, Mode::IMP, 7, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::RTI, Mode::IMP, 6, false, CPU6502::rti, CPU6502::imp),
+    (Opcode::EOR, Mode::ZIX, 6, false, CPU6502::eor, CPU6502::zix),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 8, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 3, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::EOR, Mode::ZPG, 3, false, CPU6502::eor, CPU6502::zpg),
+    (Opcode::LSR, Mode::ZPG, 5, false, CPU6502::lsr, CPU6502::zpg),
+    (Opcode::XXX, Mode::IMP, 5, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::PHA, Mode::IMP, 3, false, CPU6502::pha, CPU6502::imp),
+    (Opcode::EOR, Mode::IMM, 2, false, CPU6502::eor, CPU6502::imm),
+    (Opcode::LSR, Mode::ACC, 2, false, CPU6502::lsr_a, CPU6502::acc),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::JMP, Mode::ABS, 3, false, CPU6502::jmp, CPU6502::abs),
+    (Opcode::EOR, Mode::ABS, 4, false, CPU6502::eor, CPU6502::abs),
+    (Opcode::LSR, Mode::ABS, 6, false, CPU6502::lsr, CPU6502::abs),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::BVC, Mode::REL, 2, true, CPU6502::bvc, CPU6502::rel),
+    (Opcode::EOR, Mode::ZIY, 5, true, CPU6502::eor, CPU6502::ziy),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 8, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::EOR, Mode::ZPX, 4, false, CPU6502::eor, CPU6502::zpx),
+    (Opcode::LSR, Mode::ZPX, 6, false, CPU6502::lsr, CPU6502::zpx),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::CLI, Mode::IMP, 2, false, CPU6502::cli, CPU6502::imp),
+    (Opcode::EOR, Mode::ABY, 4, true, CPU6502::eor, CPU6502::aby),
+    (Opcode::NOP, Mode::IMP, 2, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 7, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::EOR, Mode::ABX, 4, true, CPU6502::eor, CPU6502::abx),
+    (Opcode::LSR, Mode::ABX, 7, false, CPU6502::lsr, CPU6502::abx),
+    (Opcode::XXX, Mode::IMP, 7, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::RTS, Mode::IMP, 6, false, CPU6502::rts, CPU6502::imp),
+    (Opcode::ADC, Mode::ZIX, 6, false, CPU6502::adc, CPU6502::zix),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 8, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 3, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::ADC, Mode::ZPG, 3, false, CPU6502::adc, CPU6502::zpg),
+    (Opcode::ROR, Mode::ZPG, 5, false, CPU6502::ror, CPU6502::zpg),
+    (Opcode::XXX, Mode::IMP, 5, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::PLA, Mode::IMP, 4, false, CPU6502::pla, CPU6502::imp),
+    (Opcode::ADC, Mode::IMM, 2, false, CPU6502::adc, CPU6502::imm),
+    (Opcode::ROR, Mode::ACC, 2, false, CPU6502::ror_a, CPU6502::acc),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::JMP, Mode::IND, 5, false, CPU6502::jmp, CPU6502::ind),
+    (Opcode::ADC, Mode::ABS, 4, false, CPU6502::adc, CPU6502::abs),
+    (Opcode::ROR, Mode::ABS, 6, false, CPU6502::ror, CPU6502::abs),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::BVS, Mode::REL, 2, true, CPU6502::bvs, CPU6502::rel),
+    (Opcode::ADC, Mode::ZIY, 5, true, CPU6502::adc, CPU6502::ziy),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 8, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::ADC, Mode::ZPX, 4, false, CPU6502::adc, CPU6502::zpx),
+    (Opcode::ROR, Mode::ZPX, 6, false, CPU6502::ror, CPU6502::zpx),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::SEI, Mode::IMP, 2, false, CPU6502::sei, CPU6502::imp),
+    (Opcode::ADC, Mode::ABY, 4, true, CPU6502::adc, CPU6502::aby),
+    (Opcode::NOP, Mode::IMP, 2, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 7, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::ADC, Mode::ABX, 4, true, CPU6502::adc, CPU6502::abx),
+    (Opcode::ROR, Mode::ABX, 7, false, CPU6502::ror, CPU6502::abx),
+    (Opcode::XXX, Mode::IMP, 7, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 2, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::STA, Mode::ZIX, 6, false, CPU6502::sta, CPU6502::zix),
+    (Opcode::NOP, Mode::IMP, 2, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::STY, Mode::ZPG, 3, false, CPU6502::sty, CPU6502::zpg),
+    (Opcode::STA, Mode::ZPG, 3, false, CPU6502::sta, CPU6502::zpg),
+    (Opcode::STX, Mode::ZPG, 3, false, CPU6502::stx, CPU6502::zpg),
+    (Opcode::XXX, Mode::IMP, 3, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::DEY, Mode::IMP, 2, false, CPU6502::dey, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 2, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::TXA, Mode::IMP, 2, false, CPU6502::txa, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::STY, Mode::ABS, 4, false, CPU6502::sty, CPU6502::abs),
+    (Opcode::STA, Mode::ABS, 4, false, CPU6502::sta, CPU6502::abs),
+    (Opcode::STX, Mode::ABS, 4, false, CPU6502::stx, CPU6502::abs),
+    (Opcode::XXX, Mode::IMP, 4, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::BCC, Mode::REL, 2, true, CPU6502::bcc, CPU6502::rel),
+    (Opcode::STA, Mode::ZIY, 6, false, CPU6502::sta, CPU6502::ziy),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::STY, Mode::ZPX, 4, false, CPU6502::sty, CPU6502::zpx),
+    (Opcode::STA, Mode::ZPX, 4, false, CPU6502::sta, CPU6502::zpx),
+    (Opcode::STX, Mode::ZPY, 4, false, CPU6502::stx, CPU6502::zpy),
+    (Opcode::XXX, Mode::IMP, 4, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::TYA, Mode::IMP, 2, false, CPU6502::tya, CPU6502::imp),
+    (Opcode::STA, Mode::ABY, 5, false, CPU6502::sta, CPU6502::aby),
+    (Opcode::TXS, Mode::IMP, 2, false, CPU6502::txs, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 5, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 5, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::STA, Mode::ABX, 5, false, CPU6502::sta, CPU6502::abx),
+    (Opcode::XXX, Mode::IMP, 5, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 5, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::LDY, Mode::IMM, 2, false, CPU6502::ldy, CPU6502::imm),
+    (Opcode::LDA, Mode::ZIX, 6, false, CPU6502::lda, CPU6502::zix),
+    (Opcode::LDX, Mode::IMM, 2, false, CPU6502::ldx, CPU6502::imm),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::LDY, Mode::ZPG, 3, false, CPU6502::ldy, CPU6502::zpg),
+    (Opcode::LDA, Mode::ZPG, 3, false, CPU6502::lda, CPU6502::zpg),
+    (Opcode::LDX, Mode::ZPG, 3, false, CPU6502::ldx, CPU6502::zpg),
+    (Opcode::XXX, Mode::IMP, 3, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::TAY, Mode::IMP, 2, false, CPU6502::tay, CPU6502::imp),
+    (Opcode::LDA, Mode::IMM, 2, false, CPU6502::lda, CPU6502::imm),
+    (Opcode::TAX, Mode::IMP, 2, false, CPU6502::tax, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::LDY, Mode::ABS, 4, false, CPU6502::ldy, CPU6502::abs),
+    (Opcode::LDA, Mode::ABS, 4, false, CPU6502::lda, CPU6502::abs),
+    (Opcode::LDX, Mode::ABS, 4, false, CPU6502::ldx, CPU6502::abs),
+    (Opcode::XXX, Mode::IMP, 4, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::BCS, Mode::REL, 2, true, CPU6502::bcs, CPU6502::rel),
+    (Opcode::LDA, Mode::ZIY, 5, true, CPU6502::lda, CPU6502::ziy),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 5, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::LDY, Mode::ZPX, 4, false, CPU6502::ldy, CPU6502::zpx),
+    (Opcode::LDA, Mode::ZPX, 4, false, CPU6502::lda, CPU6502::zpx),
+    (Opcode::LDX, Mode::ZPY, 4, false, CPU6502::ldx, CPU6502::zpy),
+    (Opcode::XXX, Mode::IMP, 4, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::CLV, Mode::IMP, 2, false, CPU6502::clv, CPU6502::imp),
+    (Opcode::LDA, Mode::ABY, 4, true, CPU6502::lda, CPU6502::aby),
+    (Opcode::TSX, Mode::IMP, 2, false, CPU6502::tsx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 4, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::LDY, Mode::ABX, 4, true, CPU6502::ldy, CPU6502::abx),
+    (Opcode::LDA, Mode::ABX, 4, true, CPU6502::lda, CPU6502::abx),
+    (Opcode::LDX, Mode::ABY, 4, true, CPU6502::ldx, CPU6502::aby),
+    (Opcode::XXX, Mode::IMP, 4, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::CPY, Mode::IMM, 2, false, CPU6502::cpy, CPU6502::imm),
+    (Opcode::CMP, Mode::ZIX, 6, false, CPU6502::cmp, CPU6502::zix),
+    (Opcode::NOP, Mode::IMP, 2, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 8, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::CPY, Mode::ZPG, 3, false, CPU6502::cpy, CPU6502::zpg),
+    (Opcode::CMP, Mode::ZPG, 3, false, CPU6502::cmp, CPU6502::zpg),
+    (Opcode::DEC, Mode::ZPG, 5, false, CPU6502::dec, CPU6502::zpg),
+    (Opcode::XXX, Mode::IMP, 5, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::INY, Mode::IMP, 2, false, CPU6502::iny, CPU6502::imp),
+    (Opcode::CMP, Mode::IMM, 2, false, CPU6502::cmp, CPU6502::imm),
+    (Opcode::DEX, Mode::IMP, 2, false, CPU6502::dex, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::CPY, Mode::ABS, 4, false, CPU6502::cpy, CPU6502::abs),
+    (Opcode::CMP, Mode::ABS, 4, false, CPU6502::cmp, CPU6502::abs),
+    (Opcode::DEC, Mode::ABS, 6, false, CPU6502::dec, CPU6502::abs),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::BNE, Mode::REL, 2, true, CPU6502::bne, CPU6502::rel),
+    (Opcode::CMP, Mode::ZIY, 5, true, CPU6502::cmp, CPU6502::ziy),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 8, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::CMP, Mode::ZPX, 4, false, CPU6502::cmp, CPU6502::zpx),
+    (Opcode::DEC, Mode::ZPX, 6, false, CPU6502::dec, CPU6502::zpx),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::CLD, Mode::IMP, 2, false, CPU6502::cld, CPU6502::imp),
+    (Opcode::CMP, Mode::ABY, 4, true, CPU6502::cmp, CPU6502::aby),
+    (Opcode::NOP, Mode::IMP, 2, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 7, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::CMP, Mode::ABX, 4, true, CPU6502::cmp, CPU6502::abx),
+    (Opcode::DEC, Mode::ABX, 7, false, CPU6502::dec, CPU6502::abx),
+    (Opcode::XXX, Mode::IMP, 7, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::CPX, Mode::IMM, 2, false, CPU6502::cpx, CPU6502::imm),
+    (Opcode::SBC, Mode::ZIX, 6, false, CPU6502::sbc, CPU6502::zix),
+    (Opcode::NOP, Mode::IMP, 2, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 8, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::CPX, Mode::ZPG, 3, false, CPU6502::cpx, CPU6502::zpg),
+    (Opcode::SBC, Mode::ZPG, 3, false, CPU6502::sbc, CPU6502::zpg),
+    (Opcode::INC, Mode::ZPG, 5, false, CPU6502::inc, CPU6502::zpg),
+    (Opcode::XXX, Mode::IMP, 5, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::INX, Mode::IMP, 2, false, CPU6502::inx, CPU6502::imp),
+    (Opcode::SBC, Mode::IMM, 2, false, CPU6502::sbc, CPU6502::imm),
+    (Opcode::NOP, Mode::IMP, 2, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::SBC, Mode::IMP, 2, false, CPU6502::sbc, CPU6502::imp),
+    (Opcode::CPX, Mode::ABS, 4, false, CPU6502::cpx, CPU6502::abs),
+    (Opcode::SBC, Mode::ABS, 4, false, CPU6502::sbc, CPU6502::abs),
+    (Opcode::INC, Mode::ABS, 6, false, CPU6502::inc, CPU6502::abs),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::BEQ, Mode::REL, 2, true, CPU6502::beq, CPU6502::rel),
+    (Opcode::SBC, Mode::ZIY, 5, true, CPU6502::sbc, CPU6502::ziy),
+    (Opcode::XXX, Mode::IMP, 2, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 8, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::SBC, Mode::ZPX, 4, false, CPU6502::sbc, CPU6502::zpx),
+    (Opcode::INC, Mode::ZPX, 6, false, CPU6502::inc, CPU6502::zpx),
+    (Opcode::XXX, Mode::IMP, 6, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::SED, Mode::IMP, 2, false, CPU6502::sed, CPU6502::imp),
+    (Opcode::SBC, Mode::ABY, 4, true, CPU6502::sbc, CPU6502::aby),
+    (Opcode::NOP, Mode::IMP, 2, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::XXX, Mode::IMP, 7, false, CPU6502::xxx, CPU6502::imp),
+    (Opcode::NOP, Mode::IMP, 4, false, CPU6502::nop, CPU6502::imp),
+    (Opcode::SBC, Mode::ABX, 4, true, CPU6502::sbc, CPU6502::abx),
+    (Opcode::INC, Mode::ABX, 7, false, CPU6502::inc, CPU6502::abx),
+    (Opcode::XXX, Mode::IMP, 7, false, CPU6502::xxx, CPU6502::imp),
 ];
 
 pub struct CPU6502 {
@@ -500,6 +501,9 @@ pub struct CPU6502 {
 
     // Total cycle count
     pub cycles: u64,
+
+    // Total number of instructions executed
+    pub instructions: usize,
 
     // Current instruction
     pub instruction: Option<(u16, Instruction)>,
@@ -521,6 +525,7 @@ impl CPU6502 {
             instruction: None,
             op_addr: 0,
             cycles_left: 0,
+            instructions: 0,
         };
 
         cpu
@@ -552,41 +557,50 @@ impl CPU6502 {
         self.cycles_left = 0;
     }
 
-    pub fn execute(&mut self, (_opcode, mode, cycles, op): Instruction) {
-        match mode {
-            Mode::ABS => self.abs(),
-            Mode::ABX => self.abx(),
-            Mode::ABY => self.aby(),
-            Mode::IMM => self.imm(),
-            Mode::ZPX => self.zpx(),
-            Mode::ZPG => self.zpg(),
-            Mode::ZPY => self.zpy(),
-            Mode::IND => self.ind(),
-            Mode::REL => self.rel(),
-            Mode::ZIX => self.zix(),
-            Mode::ZIY => self.ziy(),
-            Mode::ACC | Mode::IMP => {}
-        };
+    pub fn execute(&mut self, (_opcode, mode, cycles, can_cross_page_boundary, op, mode_fn): Instruction) {
+        // let crossed_page_boundary = match mode {
+        //     Mode::ABS => self.abs(),
+        //     Mode::ABX => self.abx(),
+        //     Mode::ABY => self.aby(),
+        //     Mode::IMM => self.imm(),
+        //     Mode::ZPX => self.zpx(),
+        //     Mode::ZPG => self.zpg(),
+        //     Mode::ZPY => self.zpy(),
+        //     Mode::IND => self.ind(),
+        //     Mode::REL => self.rel(),
+        //     Mode::ZIX => self.zix(),
+        //     Mode::ZIY => self.ziy(),
+        //     Mode::ACC | Mode::IMP => false
+        // };
 
-        self.cycles_left = cycles;
+        let crossed_page_boundary = mode_fn(self);
+        if crossed_page_boundary && can_cross_page_boundary {
+            self.cycles_left += 1;
+        }
 
         op(self);
     }
 
     pub fn clock(&mut self) {
-        if self.cycles_left == 0 {
-            let inst_addr = self.pc;
-            let opcode = self.pop_u8();
+        self.cycles += 1;
 
-            let instruction = INSTRUCTIONS[opcode as usize];
-
-            self.instruction = Some((inst_addr, instruction));
-            self.cycles_left = instruction.2;
-            self.execute(instruction);
+        if self.cycles_left  > 0 {
+            self.cycles_left -= 1;
+            return;
         }
 
-        self.cycles += 1;
-        self.cycles_left -= 1;
+
+
+        let inst_addr = self.pc;
+        let opcode = self.pop_u8();
+
+        let instruction = INSTRUCTIONS[opcode as usize];
+
+        self.instruction = Some((inst_addr, instruction));
+        self.instructions += 1;
+        self.cycles_left = instruction.2 - 1;
+
+        self.execute(instruction);
 
         if (DEBUG) {
             self.print_state();
@@ -672,20 +686,32 @@ impl CPU6502 {
     //
     //
 
+    /// Implied
+    fn imp(&mut self) -> bool {
+        false
+    }
+
+    // Accumulator
+    fn acc(&mut self) -> bool {
+        false
+    }
+
     /// Absolute
-    fn abs(&mut self) {
+    fn abs(&mut self) -> bool {
         self.op_addr = self.pop_u16();
+        false
     }
 
     // Immediate
-    fn imm(&mut self) {
+    fn imm(&mut self) -> bool {
         let addr = self.pc;
         self.pc += 1;
         self.op_addr = addr;
+        false
     }
 
     /// Absolute Indirect
-    fn ind(&mut self) {
+    fn ind(&mut self) -> bool {
         let addr_ptr = self.pop_u16();
 
         let lo = self.read(addr_ptr) as u16;
@@ -693,18 +719,20 @@ impl CPU6502 {
         let addr = (hi << 8) | lo;
 
         self.op_addr = addr;
+        false
     }
 
     /// Zero Page
-    fn zpg(&mut self) {
+    fn zpg(&mut self) -> bool {
         let lo = self.pop_u8();
         let addr = 0x0000 | (lo as u16);
 
         self.op_addr = addr;
+        false
     }
 
     /// Zero Page, X-Indexed
-    fn zpx(&mut self) {
+    fn zpx(&mut self) -> bool {
         let lo = self.pop_u8();
         // No carry:
         // Even though the final value is 16 bits,
@@ -713,10 +741,11 @@ impl CPU6502 {
         let addr = 0x0000 | (lo_idx as u16);
 
         self.op_addr = addr;
+        false
     }
 
     /// Zero Page, Y-Indexed
-    fn zpy(&mut self) {
+    fn zpy(&mut self) -> bool {
         let lo = self.pop_u8();
         // No carry:
         // Even though the final value is 16 bits,
@@ -725,37 +754,35 @@ impl CPU6502 {
         let addr = 0x0000 | (lo_idx as u16);
 
         self.op_addr = addr;
+        false
     }
 
     /// Absolute, X-Indexed
-    fn abx(&mut self) {
+    fn abx(&mut self) -> bool {
         self.abs();
         let abs_addr = self.op_addr;
+
         // Carry offset
         let addr = abs_addr + self.x as u16;
-        if self.crossed_page_boundary(addr) {
-            self.cycles_left += 1;
-        }
 
         self.op_addr = addr;
+        self.crossed_page_boundary(abs_addr, addr)
     }
 
     /// Absolute, Y-Indexed
-    fn aby(&mut self) {
+    fn aby(&mut self) -> bool {
         self.abs();
         let abs_addr = self.op_addr;
 
         // Carry offset
         let addr = abs_addr + self.y as u16;
-        if self.crossed_page_boundary(addr) {
-            self.cycles_left += 1;
-        }
 
         self.op_addr = addr;
+        self.crossed_page_boundary(abs_addr, addr)
     }
 
     /// Relative
-    fn rel(&mut self) {
+    fn rel(&mut self) -> bool {
         // offset is a 1-byte signed value:
         //
         // 0x00 - 0xFD is positive (0 - 127)
@@ -773,6 +800,9 @@ impl CPU6502 {
         };
 
         self.op_addr = addr;
+        
+        // Branch functions will add a cycle if the page boundary was crossed
+        false
     }
 
     /// Zero Page Indirect, X-Indexed
@@ -780,7 +810,7 @@ impl CPU6502 {
     /// Operand is zero page address.
     /// Absolute address is word in (OP + X, OP + X + 1).
     /// No carry.
-    fn zix(&mut self) {
+    fn zix(&mut self) -> bool {
         let ptr_lo = self.pop_u8();
         let ptr_lo_idx = ptr_lo.wrapping_add(self.x);
         let ptr = 0x0000 | (ptr_lo_idx as u16);
@@ -790,26 +820,24 @@ impl CPU6502 {
         let addr = (hi << 8) | lo;
 
         self.op_addr = addr;
+        false
     }
 
     /// Zero Page Indirect, Y-Indexed
     ///
     /// Operand is zero page address.
     /// Absolute address is word in (OP, OP + 1) offset by Y.
-    fn ziy(&mut self) {
+    fn ziy(&mut self) -> bool {
         self.zpg();
         let ptr = self.op_addr;
 
         let lo = self.read(ptr) as u16;
         let hi = self.read(ptr + 1) as u16;
-        let mut addr = (hi << 8) | lo;
-        if self.crossed_page_boundary(addr) {
-            self.cycles_left += 1;
-        }
-
-        addr += self.y as u16;
-
+        let abs_addr = (hi << 8) | lo;
+        let addr= abs_addr + self.y as u16;
         self.op_addr = addr;
+
+        self.crossed_page_boundary(abs_addr, addr)
     }
 
     //
@@ -1002,7 +1030,6 @@ impl CPU6502 {
             self.add_a_(acc, op);
         } else {
             // Nine's complement
-
             let mut op = self.read(self.op_addr);
             let op_lo = 9 - (op & 0xf);
             let op_hi = 9 - (op >> 4);
@@ -1141,7 +1168,7 @@ impl CPU6502 {
     #[inline]
     fn branch_(&mut self) {
         // Add another cycle if page boundary was crossed.
-        if self.crossed_page_boundary(self.op_addr) {
+        if self.crossed_page_boundary(self.pc+1, self.op_addr) {
             self.cycles_left += 1;
         }
 
@@ -1497,8 +1524,8 @@ impl CPU6502 {
     }
 
     #[inline]
-    fn crossed_page_boundary(&self, addr: u16) -> bool {
-        addr & 0xFF00 != self.pc & 0xFF00
+    fn crossed_page_boundary(&self, addr1: u16, addr2: u16) -> bool {
+        addr1 & 0xFF00 != addr2 & 0xFF00
     }
 
     #[inline]

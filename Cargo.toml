@@ -42,3 +42,5 @@ sdl2 = "0.35.2"
 clap = { version = "4.4.7", features = ["derive"] }
 parking_lot = "0.12.1"
 parking_lot_core = "0.9.9"
+serialport = "4.2.2"
+raw_tty = "0.1.0"

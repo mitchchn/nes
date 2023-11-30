@@ -1,7 +1,7 @@
-use std::{fs, path::PathBuf, time::SystemTime};
+use std::{fs, path::{PathBuf, Path}, time::SystemTime};
 
 use clap::Parser;
-use nes::{debugger::Debugger, tui::Tui};
+use nes::{debugger::Debugger, tui::Tui, display::Display};
 
 /// 6502 CPU Emulator and Debugger
 #[derive(Parser, Debug)]
@@ -15,6 +15,12 @@ struct Args {
     /// Verbose (print stats)
     #[arg(long, short)]
     verbose: bool,
+    /// Serial port device
+    #[arg(long, short)]
+    port: Option<PathBuf>,
+    /// Run at the maximum possible speed
+    #[arg(long, short)]
+    maxspeed: bool,
 
 }
 
@@ -42,8 +48,13 @@ pub fn main() {
     let mut d = Debugger::new();
     // let rom = fs::read("src/nestest.nes").expect("Could not open file");
 
-    d.load(&rom, 0);
+    d.load(&rom, 0x0000);
     d.reset();
+    d.cpu.lock().pc = 0x400;
+    
+    if args.maxspeed {
+        d.max_speed = true;
+    }
 
     if args.run {
         d.non_interactive_mode = true;
@@ -51,15 +62,17 @@ pub fn main() {
         let start: SystemTime = SystemTime::now();
         let handle = d.run();
         handle.unwrap().join();
+        
         let end = SystemTime::now().duration_since(start).unwrap();
         
         if args.verbose {
             let cpu = d.cpu.lock();
             println!("\n---");
-            println!("Total cycles: {}", cpu.cycles());
+            println!("Total cycles: \t\t{}", cpu.cycles());
+            println!("Total instructions: \t{}", cpu.instructions);
             println!("Halted in {}.{}s.", end.as_secs(), end.subsec_millis());
         }
-    } else {
+    } else { 
         let mut tui = Tui::new(d);
         let _ = tui.show();
     }

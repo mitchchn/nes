@@ -1,3 +1,5 @@
+#![feature(generic_const_items)]
+
 use wasm_bindgen::prelude::*;
 
 pub mod cpu;
@@ -5,12 +7,11 @@ pub mod display;
 pub mod tui;
 pub mod io;
 pub mod debugger;
-// mod machine;
-// pub mod mapper;
 pub mod mem;
-// mod rom;
 pub mod stdout;
 pub mod stdin;
+pub mod serial;
+pub mod bus;
 
 #[macro_use]
 extern crate bitflags;
