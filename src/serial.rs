@@ -4,8 +4,8 @@ use serialport::{self, SerialPort, TTYPort};
 
 const ACIA_DATA: u16 = 1;
 const ACIA_STATUS: u16 = 0;
-const ACIA_COMMAND: u16 = 0;
-const ACIA_CONTROL: u16 = 0;
+const ACIA_COMMAND: u16 = 2;
+const ACIA_CONTROL: u16 = 3;
 
 bitflags! {
     pub struct Status: u8 {
@@ -34,7 +34,6 @@ impl Serial {
 
 impl IO for Serial {
     fn read(&mut self, addr: u16) -> u8 {
-
         match addr {
             ACIA_STATUS => {
                 let rx_full = self.port.bytes_to_read().map(|b| b > 0).unwrap_or_default();

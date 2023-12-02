@@ -1,7 +1,7 @@
-use std::{fs, path::{PathBuf, Path}, time::SystemTime};
+use std::{fs, path::{PathBuf, Path}, time::SystemTime, borrow::BorrowMut};
 
 use clap::Parser;
-use nes::{debugger::Debugger, tui::Tui, display::Display};
+use nes::{debugger::Debugger, display::Display, tui::Tui};
 
 /// 6502 CPU Emulator and Debugger
 #[derive(Parser, Debug)]
@@ -46,15 +46,16 @@ pub fn main() {
 
 
     let mut d = Debugger::new();
-    // let rom = fs::read("src/nestest.nes").expect("Could not open file");
 
-    d.load(&rom, 0x0000);
+    d.load(&rom, 0xC000);
     d.reset();
-    d.cpu.lock().pc = 0x400;
+    // d.cpu.pc=0xC000;
+    // d.cpu.lock().pc = 0x400;
     
     if args.maxspeed {
         d.max_speed = true;
     }
+
 
     if args.run {
         d.non_interactive_mode = true;

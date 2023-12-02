@@ -1,4 +1,4 @@
-use std::io::stdout;
+use std::{io::stdout, borrow::BorrowMut};
 
 use crossterm::{
     event::{self, Event, KeyCode},
@@ -30,8 +30,7 @@ impl Tui {
 
         loop {
             let cpu = d.cpu.lock();
-
-            // d.flush(&self.mem.lock().unwrap().0[0x200..=0x5FF]);
+            // d.flush(&    self.mem.lock().unwrap().0[0x200..=0x5FF]);
 
             terminal.draw(|frame: &mut Frame| {
                 let outer_layout = Layout::default()
@@ -187,7 +186,7 @@ impl Tui {
 
                 // Display memory as rows of 8 bytes indexed by address
                 let stack_text = Line::from(
-                    d.bus.lock().mem.0[0x100..=0x1FF]
+                    cpu.mem.mem.0[0x100..=0x1FF]
                         .iter()
                         .enumerate()
                         .map(|(idx, byte)| {
@@ -213,8 +212,7 @@ impl Tui {
 
                 // Display memory as rows of 8 bytes indexed by address
                 let mem_text = Text::from(
-                    d.bus
-                        .lock()
+                    cpu.mem
                         .mem
                         .0
                         .chunks(8)

@@ -6,6 +6,8 @@ const RAM_START: u16 = 0x0000;
 const RAM_END: u16 = 0x7FFF;
 const SERIAL_START: u16 = 0xA000;
 const SERIAL_END: u16 = 0xBFFF;
+// const SERIAL_START: u16 = 0x8400;
+// const SERIAL_END: u16 = 0x8403;
 const ROM_START: u16 = 0xC000;
 const ROM_END: u16 = 0xFFFF;
 

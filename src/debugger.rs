@@ -4,7 +4,7 @@ use std::{
         Arc,
     },
     thread::{self, JoinHandle},
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant, SystemTime}, cell::RefCell, rc::Rc, borrow::BorrowMut, ops::Deref,
 };
 
 use parking_lot::Mutex;
@@ -27,8 +27,7 @@ pub enum CpuMessage {
 static HALT: AtomicBool = AtomicBool::new(true);
 
 pub struct Debugger {
-    pub cpu: Arc<Mutex<CPU6502>>,
-    pub bus: Arc<Mutex<Bus>>,
+    pub cpu: Arc<Mutex<CPU6502<Bus>>>,
     pub instruction_log: Vec<(u16, String)>,
     pub breakpoints: Vec<u16>,
     pub clock_speed: Option<u64>,
@@ -44,19 +43,18 @@ impl Debugger {
         let display = Display::new();
         let serial = Serial::new("/tmp/vserial0").expect("Could not open serial port");
 
-        let bus = Arc::new(Mutex::new(Bus {
+        let bus = Bus {
             mem,
             stdout,
             stdin,
             display,
             serial,
-        }));
+        };
 
-        let cpu = Arc::new(Mutex::new(CPU6502::new(bus.clone())));
+        let cpu = Arc::new(Mutex::new(CPU6502::new(bus)));
 
         let m = Debugger {
             cpu,
-            bus,
             instruction_log: vec![],
             breakpoints: vec![],
             clock_speed: Some(2_000_000),
@@ -105,7 +103,7 @@ impl Debugger {
     }
 
     pub fn load(&mut self, data: &[u8], offset: u16) {
-        self.bus.lock().mem.load(data, offset);
+        self.cpu.lock().mem.mem.load(data, offset);
         self.instruction_log = self.disassemble();
     }
 
@@ -144,7 +142,7 @@ impl Debugger {
     }
 
     pub fn show(&mut self) {
-        self.bus.lock().display.show();
+        // self.bus.borrow_mut().display.show();
     }
 
     pub fn pause(&mut self) {
@@ -154,7 +152,7 @@ impl Debugger {
     pub fn run(&mut self) -> Option<JoinHandle<()>> {
         HALT.store(false, Ordering::Relaxed);
 
-        let cpu = self.cpu.clone();
+        // let cpu = self.cpu;
         let breakpoints = self.breakpoints.clone();
         let clock_speed: u64 = self.clock_speed.unwrap_or(1_000_000);
 
@@ -163,27 +161,31 @@ impl Debugger {
         let ns_per_interval: u64 = 1_000_000_000 / target_fps;
         let max_speed = self.max_speed;
 
+        let cpu = self.cpu.clone();
         let cpu_thread = thread::spawn(move || {
             let mut cycles_since_last_interval = 0;
             let mut time_to_next_interval = Instant::now() + Duration::from_nanos(ns_per_interval);
 
             'running: loop {
-                if HALT.load(Ordering::Relaxed) {
-                    break 'running;
-                }
-
                 let mut cpu = cpu.lock();
-                cpu.clock();
-                cycles_since_last_interval += 1;
-                while cpu.cycles_left > 0 {
+                // if HALT.load(Ordering::Relaxed) {
+                //     break 'running;
+                // }
+
+                // let mut cpu = cpu.borrow_mut();
+                'execute: loop {
                     cpu.clock();
                     cycles_since_last_interval += 1;
-                }
+                    if cpu.cycles_left == 0 {
+                        break 'execute;
+                    }
 
+                }
 
                 // check breakpoints
                 if breakpoints.contains(&cpu.pc) {
-                    HALT.store(true, Ordering::Relaxed);
+                    break 'running;
+                    // HALT.store(true, Ordering::Relaxed);
                 }
 
                 // Run at target FPS by waiting the remaining time in a frame/interval
@@ -199,14 +201,15 @@ impl Debugger {
             }
         });
         return Some(cpu_thread);
+        None
     }
 }
 
 impl IO for Debugger {
     fn read(&mut self, addr: u16) -> u8 {
-        self.bus.lock().read(addr)
+        self.cpu.lock().mem.read(addr)
     }
     fn write(&mut self, addr: u16, data: u8) {
-        self.bus.lock().write(addr, data)
+        self.cpu.lock().mem.write(addr, data)
     }
 }
