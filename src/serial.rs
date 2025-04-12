@@ -2,15 +2,15 @@ use crate::io::IO;
 use std::{io::Write, ops::Deref, time::Instant};
 use serialport::{self, SerialPort, TTYPort};
 
-const ACIA_DATA: u16 = 1;
-const ACIA_STATUS: u16 = 0;
+const ACIA_DATA: u16 = 0;
+const ACIA_STATUS: u16 = 1;
 const ACIA_COMMAND: u16 = 2;
 const ACIA_CONTROL: u16 = 3;
 
 bitflags! {
     pub struct Status: u8 {
-        const TX_EMPTY = 1 << 1;
-        const RX_FULL = 1 << 0;
+        const TX_EMPTY = 1 << 4;
+        const RX_FULL = 1 << 3;
     }
 }
 
@@ -24,7 +24,7 @@ impl Serial {
     pub fn new(path: &str) -> Result<Self, serialport::Error> {
         let mut port = serialport::new(path, 19_200).open_native()?;
         port.set_exclusive(false).expect("Could not set exclusive to false");
-
+        
         Ok(Self {
             port: Box::new(port),
             status: Status::empty(),

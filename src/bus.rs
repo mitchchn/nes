@@ -3,9 +3,9 @@ use std::{rc::Rc, cell::RefCell};
 use crate::{serial::Serial, stdin::Stdin, stdout::Stdout, mem::Memory, display::Display, io::IO, cpu::CPU6502};
 
 const RAM_START: u16 = 0x0000;
-const RAM_END: u16 = 0x7FFF;
-const SERIAL_START: u16 = 0xA000;
-const SERIAL_END: u16 = 0xBFFF;
+const RAM_END: u16 = 0x4FFF;
+const SERIAL_START: u16 = 0x5000;
+const SERIAL_END: u16 = 0x5FFF;
 // const SERIAL_START: u16 = 0x8400;
 // const SERIAL_END: u16 = 0x8403;
 const ROM_START: u16 = 0xC000;

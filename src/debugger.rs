@@ -152,7 +152,6 @@ impl Debugger {
     pub fn run(&mut self) -> Option<JoinHandle<()>> {
         HALT.store(false, Ordering::Relaxed);
 
-        // let cpu = self.cpu;
         let breakpoints = self.breakpoints.clone();
         let clock_speed: u64 = self.clock_speed.unwrap_or(1_000_000);
 
@@ -166,13 +165,14 @@ impl Debugger {
             let mut cycles_since_last_interval = 0;
             let mut time_to_next_interval = Instant::now() + Duration::from_nanos(ns_per_interval);
 
+            // Run loop
             'running: loop {
                 let mut cpu = cpu.lock();
-                // if HALT.load(Ordering::Relaxed) {
-                //     break 'running;
-                // }
+                if HALT.load(Ordering::Relaxed) {
+                    break 'running;
+                }
 
-                // let mut cpu = cpu.borrow_mut();
+                // Execute current instruction
                 'execute: loop {
                     cpu.clock();
                     cycles_since_last_interval += 1;
@@ -182,13 +182,14 @@ impl Debugger {
 
                 }
 
-                // check breakpoints
+                // Check breakpoints
                 if breakpoints.contains(&cpu.pc) {
-                    break 'running;
-                    // HALT.store(true, Ordering::Relaxed);
+                    HALT.store(true, Ordering::Relaxed);
                 }
 
-                // Run at target FPS by waiting the remaining time in a frame/interval
+                // Instructions are executed as fast as the host is capable of running them.
+                // To simulate the speed of the original hardware, we wait out the remaining length of time in the frame (interval)
+                // before executing the next instruction. The interval length was calculated based on the desired clockspeed.
                 if !max_speed && cycles_since_last_interval > cycles_per_interval {
                     let time_left_in_interval = time_to_next_interval - Instant::now();
                     if time_left_in_interval.as_nanos() > 0 {
@@ -200,8 +201,7 @@ impl Debugger {
                 }
             }
         });
-        return Some(cpu_thread);
-        None
+        Some(cpu_thread)
     }
 }
 

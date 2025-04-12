@@ -1,14 +1,5 @@
 use colored::{ColoredString, Colorize};
-
-use crate::bus::Bus;
 use crate::io::IO;
-use crate::mem::Memory;
-
-use parking_lot::{Mutex};
-use std::cell::RefCell;
-use std::mem::MaybeUninit;
-use std::rc::Rc;
-use std::sync::Arc;
 
 const DEBUG: bool = false;
 
@@ -114,8 +105,8 @@ pub enum Opcode {
     AND,
     /// `ASL` - Arithmetic Shift Left
     ASL,
-        /// `ASL (Accumulator)` - Arithmetic Shift Left
-        ASL_A,
+    /// `ASL (Accumulator)` - Arithmetic Shift Left
+    ASL_A,
     /// `BCC` - Branch if Carry Clear
     BCC,
     /// `BCS` - Brancy if Carry Set
@@ -176,8 +167,8 @@ pub enum Opcode {
     LDY,
     /// `LSR` - Logical Shift Right
     LSR,
-        /// `LSR (Accumulator)` - Logical Shift Right
-        LSR_A,
+    /// `LSR (Accumulator)` - Logical Shift Right
+    LSR_A,
 
     /// `NOP` - No Operation
     NOP,
@@ -236,262 +227,262 @@ pub enum Opcode {
 pub type Instruction = (Opcode, Mode, u8, bool);
 
 pub const INSTRUCTIONS: [Instruction; 256] = [
-    (Opcode::BRK, Mode::IMP, 7, false,),
-    (Opcode::ORA, Mode::ZIX, 6, false,),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 8, false,),
-    (Opcode::NOP, Mode::IMP, 3, false,),
-    (Opcode::ORA, Mode::ZPG, 3, false,),
-    (Opcode::ASL, Mode::ZPG, 5, false,),
-    (Opcode::XXX, Mode::IMP, 5, false,),
-    (Opcode::PHP, Mode::IMP, 3, false,),
-    (Opcode::ORA, Mode::IMM, 2, false,),
-    (Opcode::ASL_A, Mode::ACC, 2, false,),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::ORA, Mode::ABS, 4, false,),
-    (Opcode::ASL, Mode::ABS, 6, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::BPL, Mode::REL, 2, false,),
-    (Opcode::ORA, Mode::ZIY, 5, true, ),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 8, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::ORA, Mode::ZPX, 4, false,),
-    (Opcode::ASL, Mode::ZPX, 6, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::CLC, Mode::IMP, 2, false,),
-    (Opcode::ORA, Mode::ABY, 4, true, ),
-    (Opcode::NOP, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 7, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::ORA, Mode::ABX, 4, true, ),
-    (Opcode::ASL, Mode::ABX, 7, false,),
-    (Opcode::XXX, Mode::IMP, 7, false,),
-    (Opcode::JSR, Mode::ABS, 6, false,),
-    (Opcode::AND, Mode::ZIX, 6, false,),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 8, false,),
-    (Opcode::BIT, Mode::ZPG, 3, false,),
-    (Opcode::AND, Mode::ZPG, 3, false,),
-    (Opcode::ROL, Mode::ZPG, 5, false,),
-    (Opcode::XXX, Mode::IMP, 5, false,),
-    (Opcode::PLP, Mode::IMP, 4, false,),
-    (Opcode::AND, Mode::IMM, 2, false,),
-    (Opcode::ROL_A, Mode::ACC, 2, false,),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::BIT, Mode::ABS, 4, false,),
-    (Opcode::AND, Mode::ABS, 4, false,),
-    (Opcode::ROL, Mode::ABS, 6, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::BMI, Mode::REL, 2, false,),
-    (Opcode::AND, Mode::ZIY, 5, true, ),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 8, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::AND, Mode::ZPX, 4, false,),
-    (Opcode::ROL, Mode::ZPX, 6, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::SEC, Mode::IMP, 2, false,),
-    (Opcode::AND, Mode::ABY, 4, true, ),
-    (Opcode::NOP, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 7, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::AND, Mode::ABX, 4, true, ),
-    (Opcode::ROL, Mode::ABX, 7, false,),
-    (Opcode::XXX, Mode::IMP, 7, false,),
-    (Opcode::RTI, Mode::IMP, 6, false,),
-    (Opcode::EOR, Mode::ZIX, 6, false,),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 8, false,),
-    (Opcode::NOP, Mode::IMP, 3, false,),
-    (Opcode::EOR, Mode::ZPG, 3, false,),
-    (Opcode::LSR, Mode::ZPG, 5, false,),
-    (Opcode::XXX, Mode::IMP, 5, false,),
-    (Opcode::PHA, Mode::IMP, 3, false,),
-    (Opcode::EOR, Mode::IMM, 2, false,),
-    (Opcode::LSR_A, Mode::ACC, 2, false,),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::JMP, Mode::ABS, 3, false,),
-    (Opcode::EOR, Mode::ABS, 4, false,),
-    (Opcode::LSR, Mode::ABS, 6, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::BVC, Mode::REL, 2, true, ),
-    (Opcode::EOR, Mode::ZIY, 5, true, ),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 8, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::EOR, Mode::ZPX, 4, false,),
-    (Opcode::LSR, Mode::ZPX, 6, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::CLI, Mode::IMP, 2, false,),
-    (Opcode::EOR, Mode::ABY, 4, true, ),
-    (Opcode::NOP, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 7, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::EOR, Mode::ABX, 4, true, ),
-    (Opcode::LSR, Mode::ABX, 7, false,),
-    (Opcode::XXX, Mode::IMP, 7, false,),
-    (Opcode::RTS, Mode::IMP, 6, false,),
-    (Opcode::ADC, Mode::ZIX, 6, false,),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 8, false,),
-    (Opcode::NOP, Mode::IMP, 3, false,),
-    (Opcode::ADC, Mode::ZPG, 3, false,),
-    (Opcode::ROR, Mode::ZPG, 5, false,),
-    (Opcode::XXX, Mode::IMP, 5, false,),
-    (Opcode::PLA, Mode::IMP, 4, false,),
-    (Opcode::ADC, Mode::IMM, 2, false,),
-    (Opcode::ROR_A, Mode::ACC, 2, false,),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::JMP, Mode::IND, 5, false,),
-    (Opcode::ADC, Mode::ABS, 4, false,),
-    (Opcode::ROR, Mode::ABS, 6, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::BVS, Mode::REL, 2, true, ),
-    (Opcode::ADC, Mode::ZIY, 5, true, ),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 8, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::ADC, Mode::ZPX, 4, false,),
-    (Opcode::ROR, Mode::ZPX, 6, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::SEI, Mode::IMP, 2, false,),
-    (Opcode::ADC, Mode::ABY, 4, true, ),
-    (Opcode::NOP, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 7, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::ADC, Mode::ABX, 4, true, ),
-    (Opcode::ROR, Mode::ABX, 7, false,),
-    (Opcode::XXX, Mode::IMP, 7, false,),
-    (Opcode::NOP, Mode::IMP, 2, false,),
-    (Opcode::STA, Mode::ZIX, 6, false,),
-    (Opcode::NOP, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::STY, Mode::ZPG, 3, false,),
-    (Opcode::STA, Mode::ZPG, 3, false,),
-    (Opcode::STX, Mode::ZPG, 3, false,),
-    (Opcode::XXX, Mode::IMP, 3, false,),
-    (Opcode::DEY, Mode::IMP, 2, false,),
-    (Opcode::NOP, Mode::IMP, 2, false,),
-    (Opcode::TXA, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::STY, Mode::ABS, 4, false,),
-    (Opcode::STA, Mode::ABS, 4, false,),
-    (Opcode::STX, Mode::ABS, 4, false,),
-    (Opcode::XXX, Mode::IMP, 4, false,),
-    (Opcode::BCC, Mode::REL, 2, true, ),
-    (Opcode::STA, Mode::ZIY, 6, false,),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::STY, Mode::ZPX, 4, false,),
-    (Opcode::STA, Mode::ZPX, 4, false,),
-    (Opcode::STX, Mode::ZPY, 4, false,),
-    (Opcode::XXX, Mode::IMP, 4, false,),
-    (Opcode::TYA, Mode::IMP, 2, false,),
-    (Opcode::STA, Mode::ABY, 5, false,),
-    (Opcode::TXS, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 5, false,),
-    (Opcode::NOP, Mode::IMP, 5, false,),
-    (Opcode::STA, Mode::ABX, 5, false,),
-    (Opcode::XXX, Mode::IMP, 5, false,),
-    (Opcode::XXX, Mode::IMP, 5, false,),
-    (Opcode::LDY, Mode::IMM, 2, false,),
-    (Opcode::LDA, Mode::ZIX, 6, false,),
-    (Opcode::LDX, Mode::IMM, 2, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::LDY, Mode::ZPG, 3, false,),
-    (Opcode::LDA, Mode::ZPG, 3, false,),
-    (Opcode::LDX, Mode::ZPG, 3, false,),
-    (Opcode::XXX, Mode::IMP, 3, false,),
-    (Opcode::TAY, Mode::IMP, 2, false,),
-    (Opcode::LDA, Mode::IMM, 2, false,),
-    (Opcode::TAX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::LDY, Mode::ABS, 4, false,),
-    (Opcode::LDA, Mode::ABS, 4, false,),
-    (Opcode::LDX, Mode::ABS, 4, false,),
-    (Opcode::XXX, Mode::IMP, 4, false,),
-    (Opcode::BCS, Mode::REL, 2, true, ),
-    (Opcode::LDA, Mode::ZIY, 5, true, ),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 5, false,),
-    (Opcode::LDY, Mode::ZPX, 4, false,),
-    (Opcode::LDA, Mode::ZPX, 4, false,),
-    (Opcode::LDX, Mode::ZPY, 4, false,),
-    (Opcode::XXX, Mode::IMP, 4, false,),
-    (Opcode::CLV, Mode::IMP, 2, false,),
-    (Opcode::LDA, Mode::ABY, 4, true, ),
-    (Opcode::TSX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 4, false,),
-    (Opcode::LDY, Mode::ABX, 4, true, ),
-    (Opcode::LDA, Mode::ABX, 4, true, ),
-    (Opcode::LDX, Mode::ABY, 4, true, ),
-    (Opcode::XXX, Mode::IMP, 4, false,),
-    (Opcode::CPY, Mode::IMM, 2, false,),
-    (Opcode::CMP, Mode::ZIX, 6, false,),
-    (Opcode::NOP, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 8, false,),
-    (Opcode::CPY, Mode::ZPG, 3, false,),
-    (Opcode::CMP, Mode::ZPG, 3, false,),
-    (Opcode::DEC, Mode::ZPG, 5, false,),
-    (Opcode::XXX, Mode::IMP, 5, false,),
-    (Opcode::INY, Mode::IMP, 2, false,),
-    (Opcode::CMP, Mode::IMM, 2, false,),
-    (Opcode::DEX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::CPY, Mode::ABS, 4, false,),
-    (Opcode::CMP, Mode::ABS, 4, false,),
-    (Opcode::DEC, Mode::ABS, 6, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::BNE, Mode::REL, 2, true, ),
-    (Opcode::CMP, Mode::ZIY, 5, true, ),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 8, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::CMP, Mode::ZPX, 4, false,),
-    (Opcode::DEC, Mode::ZPX, 6, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::CLD, Mode::IMP, 2, false,),
-    (Opcode::CMP, Mode::ABY, 4, true, ),
-    (Opcode::NOP, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 7, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::CMP, Mode::ABX, 4, true, ),
-    (Opcode::DEC, Mode::ABX, 7, false,),
-    (Opcode::XXX, Mode::IMP, 7, false,),
-    (Opcode::CPX, Mode::IMM, 2, false,),
-    (Opcode::SBC, Mode::ZIX, 6, false,),
-    (Opcode::NOP, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 8, false,),
-    (Opcode::CPX, Mode::ZPG, 3, false,),
-    (Opcode::SBC, Mode::ZPG, 3, false,),
-    (Opcode::INC, Mode::ZPG, 5, false,),
-    (Opcode::XXX, Mode::IMP, 5, false,),
-    (Opcode::INX, Mode::IMP, 2, false,),
-    (Opcode::SBC, Mode::IMM, 2, false,),
-    (Opcode::NOP, Mode::IMP, 2, false,),
-    (Opcode::SBC, Mode::IMP, 2, false,),
-    (Opcode::CPX, Mode::ABS, 4, false,),
-    (Opcode::SBC, Mode::ABS, 4, false,),
-    (Opcode::INC, Mode::ABS, 6, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::BEQ, Mode::REL, 2, true, ),
-    (Opcode::SBC, Mode::ZIY, 5, true, ),
-    (Opcode::XXX, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 8, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::SBC, Mode::ZPX, 4, false,),
-    (Opcode::INC, Mode::ZPX, 6, false,),
-    (Opcode::XXX, Mode::IMP, 6, false,),
-    (Opcode::SED, Mode::IMP, 2, false,),
-    (Opcode::SBC, Mode::ABY, 4, true, ),
-    (Opcode::NOP, Mode::IMP, 2, false,),
-    (Opcode::XXX, Mode::IMP, 7, false,),
-    (Opcode::NOP, Mode::IMP, 4, false,),
-    (Opcode::SBC, Mode::ABX, 4, true, ),
-    (Opcode::INC, Mode::ABX, 7, false,),
-    (Opcode::XXX, Mode::IMP, 7, false,),
+    (Opcode::BRK, Mode::IMP, 7, false),
+    (Opcode::ORA, Mode::ZIX, 6, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 3, false),
+    (Opcode::ORA, Mode::ZPG, 3, false),
+    (Opcode::ASL, Mode::ZPG, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::PHP, Mode::IMP, 3, false),
+    (Opcode::ORA, Mode::IMM, 2, false),
+    (Opcode::ASL_A, Mode::ACC, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::ORA, Mode::ABS, 4, false),
+    (Opcode::ASL, Mode::ABS, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::BPL, Mode::REL, 2, false),
+    (Opcode::ORA, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::ORA, Mode::ZPX, 4, false),
+    (Opcode::ASL, Mode::ZPX, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::CLC, Mode::IMP, 2, false),
+    (Opcode::ORA, Mode::ABY, 4, true),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::ORA, Mode::ABX, 4, true),
+    (Opcode::ASL, Mode::ABX, 7, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::JSR, Mode::ABS, 6, false),
+    (Opcode::AND, Mode::ZIX, 6, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::BIT, Mode::ZPG, 3, false),
+    (Opcode::AND, Mode::ZPG, 3, false),
+    (Opcode::ROL, Mode::ZPG, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::PLP, Mode::IMP, 4, false),
+    (Opcode::AND, Mode::IMM, 2, false),
+    (Opcode::ROL_A, Mode::ACC, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::BIT, Mode::ABS, 4, false),
+    (Opcode::AND, Mode::ABS, 4, false),
+    (Opcode::ROL, Mode::ABS, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::BMI, Mode::REL, 2, false),
+    (Opcode::AND, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::AND, Mode::ZPX, 4, false),
+    (Opcode::ROL, Mode::ZPX, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::SEC, Mode::IMP, 2, false),
+    (Opcode::AND, Mode::ABY, 4, true),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::AND, Mode::ABX, 4, true),
+    (Opcode::ROL, Mode::ABX, 7, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::RTI, Mode::IMP, 6, false),
+    (Opcode::EOR, Mode::ZIX, 6, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 3, false),
+    (Opcode::EOR, Mode::ZPG, 3, false),
+    (Opcode::LSR, Mode::ZPG, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::PHA, Mode::IMP, 3, false),
+    (Opcode::EOR, Mode::IMM, 2, false),
+    (Opcode::LSR_A, Mode::ACC, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::JMP, Mode::ABS, 3, false),
+    (Opcode::EOR, Mode::ABS, 4, false),
+    (Opcode::LSR, Mode::ABS, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::BVC, Mode::REL, 2, true),
+    (Opcode::EOR, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::EOR, Mode::ZPX, 4, false),
+    (Opcode::LSR, Mode::ZPX, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::CLI, Mode::IMP, 2, false),
+    (Opcode::EOR, Mode::ABY, 4, true),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::EOR, Mode::ABX, 4, true),
+    (Opcode::LSR, Mode::ABX, 7, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::RTS, Mode::IMP, 6, false),
+    (Opcode::ADC, Mode::ZIX, 6, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 3, false),
+    (Opcode::ADC, Mode::ZPG, 3, false),
+    (Opcode::ROR, Mode::ZPG, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::PLA, Mode::IMP, 4, false),
+    (Opcode::ADC, Mode::IMM, 2, false),
+    (Opcode::ROR_A, Mode::ACC, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::JMP, Mode::IND, 5, false),
+    (Opcode::ADC, Mode::ABS, 4, false),
+    (Opcode::ROR, Mode::ABS, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::BVS, Mode::REL, 2, true),
+    (Opcode::ADC, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::ADC, Mode::ZPX, 4, false),
+    (Opcode::ROR, Mode::ZPX, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::SEI, Mode::IMP, 2, false),
+    (Opcode::ADC, Mode::ABY, 4, true),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::ADC, Mode::ABX, 4, true),
+    (Opcode::ROR, Mode::ABX, 7, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::STA, Mode::ZIX, 6, false),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::STY, Mode::ZPG, 3, false),
+    (Opcode::STA, Mode::ZPG, 3, false),
+    (Opcode::STX, Mode::ZPG, 3, false),
+    (Opcode::XXX, Mode::IMP, 3, false),
+    (Opcode::DEY, Mode::IMP, 2, false),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::TXA, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::STY, Mode::ABS, 4, false),
+    (Opcode::STA, Mode::ABS, 4, false),
+    (Opcode::STX, Mode::ABS, 4, false),
+    (Opcode::XXX, Mode::IMP, 4, false),
+    (Opcode::BCC, Mode::REL, 2, true),
+    (Opcode::STA, Mode::ZIY, 6, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::STY, Mode::ZPX, 4, false),
+    (Opcode::STA, Mode::ZPX, 4, false),
+    (Opcode::STX, Mode::ZPY, 4, false),
+    (Opcode::XXX, Mode::IMP, 4, false),
+    (Opcode::TYA, Mode::IMP, 2, false),
+    (Opcode::STA, Mode::ABY, 5, false),
+    (Opcode::TXS, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::NOP, Mode::IMP, 5, false),
+    (Opcode::STA, Mode::ABX, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::LDY, Mode::IMM, 2, false),
+    (Opcode::LDA, Mode::ZIX, 6, false),
+    (Opcode::LDX, Mode::IMM, 2, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::LDY, Mode::ZPG, 3, false),
+    (Opcode::LDA, Mode::ZPG, 3, false),
+    (Opcode::LDX, Mode::ZPG, 3, false),
+    (Opcode::XXX, Mode::IMP, 3, false),
+    (Opcode::TAY, Mode::IMP, 2, false),
+    (Opcode::LDA, Mode::IMM, 2, false),
+    (Opcode::TAX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::LDY, Mode::ABS, 4, false),
+    (Opcode::LDA, Mode::ABS, 4, false),
+    (Opcode::LDX, Mode::ABS, 4, false),
+    (Opcode::XXX, Mode::IMP, 4, false),
+    (Opcode::BCS, Mode::REL, 2, true),
+    (Opcode::LDA, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::LDY, Mode::ZPX, 4, false),
+    (Opcode::LDA, Mode::ZPX, 4, false),
+    (Opcode::LDX, Mode::ZPY, 4, false),
+    (Opcode::XXX, Mode::IMP, 4, false),
+    (Opcode::CLV, Mode::IMP, 2, false),
+    (Opcode::LDA, Mode::ABY, 4, true),
+    (Opcode::TSX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 4, false),
+    (Opcode::LDY, Mode::ABX, 4, true),
+    (Opcode::LDA, Mode::ABX, 4, true),
+    (Opcode::LDX, Mode::ABY, 4, true),
+    (Opcode::XXX, Mode::IMP, 4, false),
+    (Opcode::CPY, Mode::IMM, 2, false),
+    (Opcode::CMP, Mode::ZIX, 6, false),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::CPY, Mode::ZPG, 3, false),
+    (Opcode::CMP, Mode::ZPG, 3, false),
+    (Opcode::DEC, Mode::ZPG, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::INY, Mode::IMP, 2, false),
+    (Opcode::CMP, Mode::IMM, 2, false),
+    (Opcode::DEX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::CPY, Mode::ABS, 4, false),
+    (Opcode::CMP, Mode::ABS, 4, false),
+    (Opcode::DEC, Mode::ABS, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::BNE, Mode::REL, 2, true),
+    (Opcode::CMP, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::CMP, Mode::ZPX, 4, false),
+    (Opcode::DEC, Mode::ZPX, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::CLD, Mode::IMP, 2, false),
+    (Opcode::CMP, Mode::ABY, 4, true),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::CMP, Mode::ABX, 4, true),
+    (Opcode::DEC, Mode::ABX, 7, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::CPX, Mode::IMM, 2, false),
+    (Opcode::SBC, Mode::ZIX, 6, false),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::CPX, Mode::ZPG, 3, false),
+    (Opcode::SBC, Mode::ZPG, 3, false),
+    (Opcode::INC, Mode::ZPG, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::INX, Mode::IMP, 2, false),
+    (Opcode::SBC, Mode::IMM, 2, false),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::SBC, Mode::IMP, 2, false),
+    (Opcode::CPX, Mode::ABS, 4, false),
+    (Opcode::SBC, Mode::ABS, 4, false),
+    (Opcode::INC, Mode::ABS, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::BEQ, Mode::REL, 2, true),
+    (Opcode::SBC, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::SBC, Mode::ZPX, 4, false),
+    (Opcode::INC, Mode::ZPX, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::SED, Mode::IMP, 2, false),
+    (Opcode::SBC, Mode::ABY, 4, true),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::SBC, Mode::ABX, 4, true),
+    (Opcode::INC, Mode::ABX, 7, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
 ];
 
 pub struct CPU6502<T: IO> {
@@ -521,9 +512,9 @@ pub struct CPU6502<T: IO> {
     pub cycles_left: u8,
 }
 
-impl <T: IO> CPU6502<T> {
+impl<T: IO> CPU6502<T> {
     pub fn new(mem: T) -> Self {
-        let cpu = CPU6502 {
+        CPU6502 {
             mem,
             pc: 0,
             a: 0,
@@ -536,17 +527,7 @@ impl <T: IO> CPU6502<T> {
             op_addr: 0,
             cycles_left: 0,
             instructions: 0,
-        };
-
-        // cpu.instruction_table = Some(
-        //     {
-        //         let mut table: [Instr<T>; 256] = [
-        //             (Self::and, Self::abs); 256                ];
-        //         table
-        //     },
-        // );
-
-        cpu
+        }
     }
 
     /// Reset the CPU to an initial good state.
@@ -575,7 +556,12 @@ impl <T: IO> CPU6502<T> {
         self.cycles_left = 0;
     }
 
-    pub fn execute(&mut self, (opcode, mode, cycles, can_cross_page_boundary): Instruction) {
+    pub fn execute(&mut self, instruction: Instruction) {
+        let (opcode, mode, cycles, can_cross_page_boundary) = instruction;
+        self.instruction = Some((self.pc, instruction));
+        self.instructions += 1;
+        self.cycles_left = cycles - 1;
+
         let crossed_page_boundary = match mode {
             Mode::ABS => self.abs(),
             Mode::ABX => self.abx(),
@@ -589,9 +575,8 @@ impl <T: IO> CPU6502<T> {
             Mode::ZIX => self.zix(),
             Mode::ZIY => self.ziy(),
             Mode::ACC => self.acc(),
-            Mode::IMP => self.imp(),            
+            Mode::IMP => self.imp(),
         };
-
 
         if crossed_page_boundary && can_cross_page_boundary {
             self.cycles_left += 1;
@@ -665,20 +650,13 @@ impl <T: IO> CPU6502<T> {
     pub fn clock(&mut self) {
         self.cycles += 1;
 
-        if self.cycles_left  > 0 {
+        if self.cycles_left > 0 {
             self.cycles_left -= 1;
             return;
         }
 
-        let inst_addr = self.pc;
         let opcode = self.pop_u8();
-
         let instruction = INSTRUCTIONS[opcode as usize];
-
-        self.instruction = Some((inst_addr, instruction));
-        self.instructions += 1;
-        self.cycles_left = instruction.2 - 1;
-
         self.execute(instruction);
 
         // self.cycles_left = 0;
@@ -891,7 +869,7 @@ impl <T: IO> CPU6502<T> {
         };
 
         self.op_addr = addr;
-        
+
         // Branch functions will add a cycle if the page boundary was crossed
         false
     }
@@ -927,7 +905,7 @@ impl <T: IO> CPU6502<T> {
         let lo = self.read(ptr) as u16;
         let hi = self.read(ptr + 1) as u16;
         let abs_addr = (hi << 8) | lo;
-        let addr= abs_addr + self.y as u16;
+        let addr = abs_addr + self.y as u16;
         self.op_addr = addr;
 
         self.crossed_page_boundary(abs_addr, addr)
@@ -1261,7 +1239,7 @@ impl <T: IO> CPU6502<T> {
     #[inline]
     fn branch_(&mut self) {
         // Add another cycle if page boundary was crossed.
-        if self.crossed_page_boundary(self.pc+1, self.op_addr) {
+        if self.crossed_page_boundary(self.pc + 1, self.op_addr) {
             self.cycles_left += 1;
         }
 
@@ -1669,7 +1647,7 @@ impl <T: IO> CPU6502<T> {
     }
 }
 
-impl <T: IO> IO for CPU6502<T> {
+impl<T: IO> IO for CPU6502<T> {
     fn read(&mut self, addr: u16) -> u8 {
         self.mem.read(addr)
     }
@@ -1677,4 +1655,3 @@ impl <T: IO> IO for CPU6502<T> {
         self.mem.write(addr, data)
     }
 }
-

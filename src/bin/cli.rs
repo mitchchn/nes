@@ -47,10 +47,13 @@ pub fn main() {
 
     let mut d = Debugger::new();
 
-    d.load(&rom, 0xC000);
+    // d.load(&rom, 0xC000);
+    // d.load(&rom, 0xFFFF-255);
+    d.load(&rom, 0x8000);
+    d.load(&rom, 0);
     d.reset();
-    // d.cpu.pc=0xC000;
-    // d.cpu.lock().pc = 0x400;
+    // d.cpu.lock().pc =0x400;
+    // d.cpu.lock().pc = 0x4000;
     
     if args.maxspeed {
         d.max_speed = true;
