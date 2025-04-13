@@ -5,20 +5,18 @@ use std::io::Write;
 pub struct Stdout {
     buffer: [u8; 4096],
     pos: usize,
-    handle: std::io::Stdout,
 }
 
 impl Stdout {
     pub fn new() -> Self {
         Stdout {
-            handle: std::io::stdout(),
             buffer: [0; 4096],
             pos: 0,
         }
     }
 
     pub fn flush(&mut self) {
-        let _ = self.handle.write(&self.buffer);
+        let _ = std::io::stdout().write(&self.buffer);
         self.buffer = [0; 4096];
         self.pos = 0;
     }

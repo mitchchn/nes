@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use std::{cell::RefCell, rc::Rc};
 
 use crate::mem::Memory;
@@ -31,11 +32,11 @@ pub const CART_END: u16 = 0xFFFF;
 ///     - $FFFE-$FFFF: IRQ/BRK vector
 pub struct Mapper {
     pub mem: Memory,
-    pub rom: Rc<RefCell<Rom>>,
+    pub rom: Arc<Mutex<Rom>>,
 }
 
 impl Mapper {
-    pub fn new(rom: Rc<RefCell<Rom>>) -> Self {
+    pub fn new(rom: Arc<Mutex<Rom>>) -> Self {
         let b = Mapper {
             mem: Memory::new(),
             rom,
@@ -50,7 +51,7 @@ impl IO for Mapper {
         // println!("addr: {}", addr);
         match addr {
             RAM_START..=RAM_END => self.mem.read(addr - RAM_START),
-            CART_START..=CART_END => self.rom.as_ref().borrow_mut().read(addr),
+            CART_START..=CART_END => self.rom.as_ref().lock().unwrap().read(addr),
             _ => 0,
         }
     }
@@ -61,7 +62,8 @@ impl IO for Mapper {
             CART_START..=CART_END => self
                 .rom
                 .as_ref()
-                .borrow_mut()
+                .lock()
+                .unwrap()
                 .write(addr - CART_START, data),
             _ => {}
         };

@@ -1,9 +1,5 @@
 use colored::{ColoredString, Colorize};
-
 use crate::io::IO;
-
-use std::cell::RefCell;
-use std::rc::Rc;
 
 const DEBUG: bool = false;
 
@@ -92,7 +88,7 @@ pub enum Mode {
     ZIY,
     /// Relative
     ///
-    /// e.g. `BEQ $AAAA`
+    /// e.g. `BEQ $AAAA`adc_dec
     REL,
     /// Absolute Indirect
     ///
@@ -109,6 +105,8 @@ pub enum Opcode {
     AND,
     /// `ASL` - Arithmetic Shift Left
     ASL,
+    /// `ASL (Accumulator)` - Arithmetic Shift Left
+    ASL_A,
     /// `BCC` - Branch if Carry Clear
     BCC,
     /// `BCS` - Brancy if Carry Set
@@ -169,6 +167,9 @@ pub enum Opcode {
     LDY,
     /// `LSR` - Logical Shift Right
     LSR,
+    /// `LSR (Accumulator)` - Logical Shift Right
+    LSR_A,
+
     /// `NOP` - No Operation
     NOP,
     /// `ORA` - Logical OR
@@ -183,8 +184,12 @@ pub enum Opcode {
     PLP,
     /// `ROL` - Rotate Left
     ROL,
+    /// `ROL (Accumulator)` - Rotate Left
+    ROL_A,
     /// `ROR` - Rotate Right
     ROR,
+    /// `ROR (Accumulator)` - Rotate Right
+    ROR_A,
     /// `RTI` - Return from Interrupt
     RTI,
     /// `RTS` - Return from Subroutine
@@ -219,270 +224,269 @@ pub enum Opcode {
     XXX,
 }
 
-pub type Instruction = (Opcode, Mode, u8, fn(&mut CPU6502));
+pub type Instruction = (Opcode, Mode, u8, bool);
 
 pub const INSTRUCTIONS: [Instruction; 256] = [
-    (Opcode::BRK, Mode::IMP, 7, CPU6502::brk),
-    (Opcode::ORA, Mode::ZIX, 6, CPU6502::ora),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 3, CPU6502::nop),
-    (Opcode::ORA, Mode::ZPG, 3, CPU6502::ora),
-    (Opcode::ASL, Mode::ZPG, 5, CPU6502::asl),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::PHP, Mode::IMP, 3, CPU6502::php),
-    (Opcode::ORA, Mode::IMM, 2, CPU6502::ora),
-    (Opcode::ASL, Mode::ACC, 2, CPU6502::asl_a),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::ORA, Mode::ABS, 4, CPU6502::ora),
-    (Opcode::ASL, Mode::ABS, 6, CPU6502::asl),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::BPL, Mode::REL, 2, CPU6502::bpl),
-    (Opcode::ORA, Mode::ZIY, 5, CPU6502::ora),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::ORA, Mode::ZPX, 4, CPU6502::ora),
-    (Opcode::ASL, Mode::ZPX, 6, CPU6502::asl),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::CLC, Mode::IMP, 2, CPU6502::clc),
-    (Opcode::ORA, Mode::ABY, 4, CPU6502::ora),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::ORA, Mode::ABX, 4, CPU6502::ora),
-    (Opcode::ASL, Mode::ABX, 7, CPU6502::asl),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::JSR, Mode::ABS, 6, CPU6502::jsr),
-    (Opcode::AND, Mode::ZIX, 6, CPU6502::and),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::BIT, Mode::ZPG, 3, CPU6502::bit),
-    (Opcode::AND, Mode::ZPG, 3, CPU6502::and),
-    (Opcode::ROL, Mode::ZPG, 5, CPU6502::rol),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::PLP, Mode::IMP, 4, CPU6502::plp),
-    (Opcode::AND, Mode::IMM, 2, CPU6502::and),
-    (Opcode::ROL, Mode::ACC, 2, CPU6502::rol_a),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::BIT, Mode::ABS, 4, CPU6502::bit),
-    (Opcode::AND, Mode::ABS, 4, CPU6502::and),
-    (Opcode::ROL, Mode::ABS, 6, CPU6502::rol),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::BMI, Mode::REL, 2, CPU6502::bmi),
-    (Opcode::AND, Mode::ZIY, 5, CPU6502::and),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::AND, Mode::ZPX, 4, CPU6502::and),
-    (Opcode::ROL, Mode::ZPX, 6, CPU6502::rol),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::SEC, Mode::IMP, 2, CPU6502::sec),
-    (Opcode::AND, Mode::ABY, 4, CPU6502::and),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::AND, Mode::ABX, 4, CPU6502::and),
-    (Opcode::ROL, Mode::ABX, 7, CPU6502::rol),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::RTI, Mode::IMP, 6, CPU6502::rti),
-    (Opcode::EOR, Mode::ZIX, 6, CPU6502::eor),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 3, CPU6502::nop),
-    (Opcode::EOR, Mode::ZPG, 3, CPU6502::eor),
-    (Opcode::LSR, Mode::ZPG, 5, CPU6502::lsr),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::PHA, Mode::IMP, 3, CPU6502::pha),
-    (Opcode::EOR, Mode::IMM, 2, CPU6502::eor),
-    (Opcode::LSR, Mode::ACC, 2, CPU6502::lsr_a),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::JMP, Mode::ABS, 3, CPU6502::jmp),
-    (Opcode::EOR, Mode::ABS, 4, CPU6502::eor),
-    (Opcode::LSR, Mode::ABS, 6, CPU6502::lsr),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::BVC, Mode::REL, 2, CPU6502::bvc),
-    (Opcode::EOR, Mode::ZIY, 5, CPU6502::eor),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::EOR, Mode::ZPX, 4, CPU6502::eor),
-    (Opcode::LSR, Mode::ZPX, 6, CPU6502::lsr),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::CLI, Mode::IMP, 2, CPU6502::cli),
-    (Opcode::EOR, Mode::ABY, 4, CPU6502::eor),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::EOR, Mode::ABX, 4, CPU6502::eor),
-    (Opcode::LSR, Mode::ABX, 7, CPU6502::lsr),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::RTS, Mode::IMP, 6, CPU6502::rts),
-    (Opcode::ADC, Mode::ZIX, 6, CPU6502::adc),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 3, CPU6502::nop),
-    (Opcode::ADC, Mode::ZPG, 3, CPU6502::adc),
-    (Opcode::ROR, Mode::ZPG, 5, CPU6502::ror),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::PLA, Mode::IMP, 4, CPU6502::pla),
-    (Opcode::ADC, Mode::IMM, 2, CPU6502::adc),
-    (Opcode::ROR, Mode::ACC, 2, CPU6502::ror_a),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::JMP, Mode::IND, 5, CPU6502::jmp),
-    (Opcode::ADC, Mode::ABS, 4, CPU6502::adc),
-    (Opcode::ROR, Mode::ABS, 6, CPU6502::ror),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::BVS, Mode::REL, 2, CPU6502::bvs),
-    (Opcode::ADC, Mode::ZIY, 5, CPU6502::adc),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::ADC, Mode::ZPX, 4, CPU6502::adc),
-    (Opcode::ROR, Mode::ZPX, 6, CPU6502::ror),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::SEI, Mode::IMP, 2, CPU6502::sei),
-    (Opcode::ADC, Mode::ABY, 4, CPU6502::adc),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::ADC, Mode::ABX, 4, CPU6502::adc),
-    (Opcode::ROR, Mode::ABX, 7, CPU6502::ror),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::STA, Mode::ZIX, 6, CPU6502::sta),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::STY, Mode::ZPG, 3, CPU6502::sty),
-    (Opcode::STA, Mode::ZPG, 3, CPU6502::sta),
-    (Opcode::STX, Mode::ZPG, 3, CPU6502::stx),
-    (Opcode::XXX, Mode::IMP, 3, CPU6502::xxx),
-    (Opcode::DEY, Mode::IMP, 2, CPU6502::dey),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::TXA, Mode::IMP, 2, CPU6502::txa),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::STY, Mode::ABS, 4, CPU6502::sty),
-    (Opcode::STA, Mode::ABS, 4, CPU6502::sta),
-    (Opcode::STX, Mode::ABS, 4, CPU6502::stx),
-    (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::BCC, Mode::REL, 2, CPU6502::bcc),
-    (Opcode::STA, Mode::ZIY, 6, CPU6502::sta),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::STY, Mode::ZPX, 4, CPU6502::sty),
-    (Opcode::STA, Mode::ZPX, 4, CPU6502::sta),
-    (Opcode::STX, Mode::ZPY, 4, CPU6502::stx),
-    (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::TYA, Mode::IMP, 2, CPU6502::tya),
-    (Opcode::STA, Mode::ABY, 5, CPU6502::sta),
-    (Opcode::TXS, Mode::IMP, 2, CPU6502::txs),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 5, CPU6502::nop),
-    (Opcode::STA, Mode::ABX, 5, CPU6502::sta),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::LDY, Mode::IMM, 2, CPU6502::ldy),
-    (Opcode::LDA, Mode::ZIX, 6, CPU6502::lda),
-    (Opcode::LDX, Mode::IMM, 2, CPU6502::ldx),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::LDY, Mode::ZPG, 3, CPU6502::ldy),
-    (Opcode::LDA, Mode::ZPG, 3, CPU6502::lda),
-    (Opcode::LDX, Mode::ZPG, 3, CPU6502::ldx),
-    (Opcode::XXX, Mode::IMP, 3, CPU6502::xxx),
-    (Opcode::TAY, Mode::IMP, 2, CPU6502::tay),
-    (Opcode::LDA, Mode::IMM, 2, CPU6502::lda),
-    (Opcode::TAX, Mode::IMP, 2, CPU6502::tax),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::LDY, Mode::ABS, 4, CPU6502::ldy),
-    (Opcode::LDA, Mode::ABS, 4, CPU6502::lda),
-    (Opcode::LDX, Mode::ABS, 4, CPU6502::ldx),
-    (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::BCS, Mode::REL, 2, CPU6502::bcs),
-    (Opcode::LDA, Mode::ZIY, 5, CPU6502::lda),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::LDY, Mode::ZPX, 4, CPU6502::ldy),
-    (Opcode::LDA, Mode::ZPX, 4, CPU6502::lda),
-    (Opcode::LDX, Mode::ZPY, 4, CPU6502::ldx),
-    (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::CLV, Mode::IMP, 2, CPU6502::clv),
-    (Opcode::LDA, Mode::ABY, 4, CPU6502::lda),
-    (Opcode::TSX, Mode::IMP, 2, CPU6502::tsx),
-    (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::LDY, Mode::ABX, 4, CPU6502::ldy),
-    (Opcode::LDA, Mode::ABX, 4, CPU6502::lda),
-    (Opcode::LDX, Mode::ABY, 4, CPU6502::ldx),
-    (Opcode::XXX, Mode::IMP, 4, CPU6502::xxx),
-    (Opcode::CPY, Mode::IMM, 2, CPU6502::cpy),
-    (Opcode::CMP, Mode::ZIX, 6, CPU6502::cmp),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::CPY, Mode::ZPG, 3, CPU6502::cpy),
-    (Opcode::CMP, Mode::ZPG, 3, CPU6502::cmp),
-    (Opcode::DEC, Mode::ZPG, 5, CPU6502::dec),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::INY, Mode::IMP, 2, CPU6502::iny),
-    (Opcode::CMP, Mode::IMM, 2, CPU6502::cmp),
-    (Opcode::DEX, Mode::IMP, 2, CPU6502::dex),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::CPY, Mode::ABS, 4, CPU6502::cpy),
-    (Opcode::CMP, Mode::ABS, 4, CPU6502::cmp),
-    (Opcode::DEC, Mode::ABS, 6, CPU6502::dec),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::BNE, Mode::REL, 2, CPU6502::bne),
-    (Opcode::CMP, Mode::ZIY, 5, CPU6502::cmp),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::CMP, Mode::ZPX, 4, CPU6502::cmp),
-    (Opcode::DEC, Mode::ZPX, 6, CPU6502::dec),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::CLD, Mode::IMP, 2, CPU6502::cld),
-    (Opcode::CMP, Mode::ABY, 4, CPU6502::cmp),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::CMP, Mode::ABX, 4, CPU6502::cmp),
-    (Opcode::DEC, Mode::ABX, 7, CPU6502::dec),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::CPX, Mode::IMM, 2, CPU6502::cpx),
-    (Opcode::SBC, Mode::ZIX, 6, CPU6502::sbc),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::CPX, Mode::ZPG, 3, CPU6502::cpx),
-    (Opcode::SBC, Mode::ZPG, 3, CPU6502::sbc),
-    (Opcode::INC, Mode::ZPG, 5, CPU6502::inc),
-    (Opcode::XXX, Mode::IMP, 5, CPU6502::xxx),
-    (Opcode::INX, Mode::IMP, 2, CPU6502::inx),
-    (Opcode::SBC, Mode::IMM, 2, CPU6502::sbc),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::SBC, Mode::IMP, 2, CPU6502::sbc),
-    (Opcode::CPX, Mode::ABS, 4, CPU6502::cpx),
-    (Opcode::SBC, Mode::ABS, 4, CPU6502::sbc),
-    (Opcode::INC, Mode::ABS, 6, CPU6502::inc),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::BEQ, Mode::REL, 2, CPU6502::beq),
-    (Opcode::SBC, Mode::ZIY, 5, CPU6502::sbc),
-    (Opcode::XXX, Mode::IMP, 2, CPU6502::xxx),
-    (Opcode::XXX, Mode::IMP, 8, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::SBC, Mode::ZPX, 4, CPU6502::sbc),
-    (Opcode::INC, Mode::ZPX, 6, CPU6502::inc),
-    (Opcode::XXX, Mode::IMP, 6, CPU6502::xxx),
-    (Opcode::SED, Mode::IMP, 2, CPU6502::sed),
-    (Opcode::SBC, Mode::ABY, 4, CPU6502::sbc),
-    (Opcode::NOP, Mode::IMP, 2, CPU6502::nop),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
-    (Opcode::NOP, Mode::IMP, 4, CPU6502::nop),
-    (Opcode::SBC, Mode::ABX, 4, CPU6502::sbc),
-    (Opcode::INC, Mode::ABX, 7, CPU6502::inc),
-    (Opcode::XXX, Mode::IMP, 7, CPU6502::xxx),
+    (Opcode::BRK, Mode::IMP, 7, false),
+    (Opcode::ORA, Mode::ZIX, 6, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 3, false),
+    (Opcode::ORA, Mode::ZPG, 3, false),
+    (Opcode::ASL, Mode::ZPG, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::PHP, Mode::IMP, 3, false),
+    (Opcode::ORA, Mode::IMM, 2, false),
+    (Opcode::ASL_A, Mode::ACC, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::ORA, Mode::ABS, 4, false),
+    (Opcode::ASL, Mode::ABS, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::BPL, Mode::REL, 2, false),
+    (Opcode::ORA, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::ORA, Mode::ZPX, 4, false),
+    (Opcode::ASL, Mode::ZPX, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::CLC, Mode::IMP, 2, false),
+    (Opcode::ORA, Mode::ABY, 4, true),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::ORA, Mode::ABX, 4, true),
+    (Opcode::ASL, Mode::ABX, 7, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::JSR, Mode::ABS, 6, false),
+    (Opcode::AND, Mode::ZIX, 6, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::BIT, Mode::ZPG, 3, false),
+    (Opcode::AND, Mode::ZPG, 3, false),
+    (Opcode::ROL, Mode::ZPG, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::PLP, Mode::IMP, 4, false),
+    (Opcode::AND, Mode::IMM, 2, false),
+    (Opcode::ROL_A, Mode::ACC, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::BIT, Mode::ABS, 4, false),
+    (Opcode::AND, Mode::ABS, 4, false),
+    (Opcode::ROL, Mode::ABS, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::BMI, Mode::REL, 2, false),
+    (Opcode::AND, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::AND, Mode::ZPX, 4, false),
+    (Opcode::ROL, Mode::ZPX, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::SEC, Mode::IMP, 2, false),
+    (Opcode::AND, Mode::ABY, 4, true),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::AND, Mode::ABX, 4, true),
+    (Opcode::ROL, Mode::ABX, 7, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::RTI, Mode::IMP, 6, false),
+    (Opcode::EOR, Mode::ZIX, 6, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 3, false),
+    (Opcode::EOR, Mode::ZPG, 3, false),
+    (Opcode::LSR, Mode::ZPG, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::PHA, Mode::IMP, 3, false),
+    (Opcode::EOR, Mode::IMM, 2, false),
+    (Opcode::LSR_A, Mode::ACC, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::JMP, Mode::ABS, 3, false),
+    (Opcode::EOR, Mode::ABS, 4, false),
+    (Opcode::LSR, Mode::ABS, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::BVC, Mode::REL, 2, true),
+    (Opcode::EOR, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::EOR, Mode::ZPX, 4, false),
+    (Opcode::LSR, Mode::ZPX, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::CLI, Mode::IMP, 2, false),
+    (Opcode::EOR, Mode::ABY, 4, true),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::EOR, Mode::ABX, 4, true),
+    (Opcode::LSR, Mode::ABX, 7, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::RTS, Mode::IMP, 6, false),
+    (Opcode::ADC, Mode::ZIX, 6, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 3, false),
+    (Opcode::ADC, Mode::ZPG, 3, false),
+    (Opcode::ROR, Mode::ZPG, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::PLA, Mode::IMP, 4, false),
+    (Opcode::ADC, Mode::IMM, 2, false),
+    (Opcode::ROR_A, Mode::ACC, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::JMP, Mode::IND, 5, false),
+    (Opcode::ADC, Mode::ABS, 4, false),
+    (Opcode::ROR, Mode::ABS, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::BVS, Mode::REL, 2, true),
+    (Opcode::ADC, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::ADC, Mode::ZPX, 4, false),
+    (Opcode::ROR, Mode::ZPX, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::SEI, Mode::IMP, 2, false),
+    (Opcode::ADC, Mode::ABY, 4, true),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::ADC, Mode::ABX, 4, true),
+    (Opcode::ROR, Mode::ABX, 7, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::STA, Mode::ZIX, 6, false),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::STY, Mode::ZPG, 3, false),
+    (Opcode::STA, Mode::ZPG, 3, false),
+    (Opcode::STX, Mode::ZPG, 3, false),
+    (Opcode::XXX, Mode::IMP, 3, false),
+    (Opcode::DEY, Mode::IMP, 2, false),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::TXA, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::STY, Mode::ABS, 4, false),
+    (Opcode::STA, Mode::ABS, 4, false),
+    (Opcode::STX, Mode::ABS, 4, false),
+    (Opcode::XXX, Mode::IMP, 4, false),
+    (Opcode::BCC, Mode::REL, 2, true),
+    (Opcode::STA, Mode::ZIY, 6, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::STY, Mode::ZPX, 4, false),
+    (Opcode::STA, Mode::ZPX, 4, false),
+    (Opcode::STX, Mode::ZPY, 4, false),
+    (Opcode::XXX, Mode::IMP, 4, false),
+    (Opcode::TYA, Mode::IMP, 2, false),
+    (Opcode::STA, Mode::ABY, 5, false),
+    (Opcode::TXS, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::NOP, Mode::IMP, 5, false),
+    (Opcode::STA, Mode::ABX, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::LDY, Mode::IMM, 2, false),
+    (Opcode::LDA, Mode::ZIX, 6, false),
+    (Opcode::LDX, Mode::IMM, 2, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::LDY, Mode::ZPG, 3, false),
+    (Opcode::LDA, Mode::ZPG, 3, false),
+    (Opcode::LDX, Mode::ZPG, 3, false),
+    (Opcode::XXX, Mode::IMP, 3, false),
+    (Opcode::TAY, Mode::IMP, 2, false),
+    (Opcode::LDA, Mode::IMM, 2, false),
+    (Opcode::TAX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::LDY, Mode::ABS, 4, false),
+    (Opcode::LDA, Mode::ABS, 4, false),
+    (Opcode::LDX, Mode::ABS, 4, false),
+    (Opcode::XXX, Mode::IMP, 4, false),
+    (Opcode::BCS, Mode::REL, 2, true),
+    (Opcode::LDA, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::LDY, Mode::ZPX, 4, false),
+    (Opcode::LDA, Mode::ZPX, 4, false),
+    (Opcode::LDX, Mode::ZPY, 4, false),
+    (Opcode::XXX, Mode::IMP, 4, false),
+    (Opcode::CLV, Mode::IMP, 2, false),
+    (Opcode::LDA, Mode::ABY, 4, true),
+    (Opcode::TSX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 4, false),
+    (Opcode::LDY, Mode::ABX, 4, true),
+    (Opcode::LDA, Mode::ABX, 4, true),
+    (Opcode::LDX, Mode::ABY, 4, true),
+    (Opcode::XXX, Mode::IMP, 4, false),
+    (Opcode::CPY, Mode::IMM, 2, false),
+    (Opcode::CMP, Mode::ZIX, 6, false),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::CPY, Mode::ZPG, 3, false),
+    (Opcode::CMP, Mode::ZPG, 3, false),
+    (Opcode::DEC, Mode::ZPG, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::INY, Mode::IMP, 2, false),
+    (Opcode::CMP, Mode::IMM, 2, false),
+    (Opcode::DEX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::CPY, Mode::ABS, 4, false),
+    (Opcode::CMP, Mode::ABS, 4, false),
+    (Opcode::DEC, Mode::ABS, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::BNE, Mode::REL, 2, true),
+    (Opcode::CMP, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::CMP, Mode::ZPX, 4, false),
+    (Opcode::DEC, Mode::ZPX, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::CLD, Mode::IMP, 2, false),
+    (Opcode::CMP, Mode::ABY, 4, true),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::CMP, Mode::ABX, 4, true),
+    (Opcode::DEC, Mode::ABX, 7, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::CPX, Mode::IMM, 2, false),
+    (Opcode::SBC, Mode::ZIX, 6, false),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::CPX, Mode::ZPG, 3, false),
+    (Opcode::SBC, Mode::ZPG, 3, false),
+    (Opcode::INC, Mode::ZPG, 5, false),
+    (Opcode::XXX, Mode::IMP, 5, false),
+    (Opcode::INX, Mode::IMP, 2, false),
+    (Opcode::SBC, Mode::IMM, 2, false),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::SBC, Mode::IMP, 2, false),
+    (Opcode::CPX, Mode::ABS, 4, false),
+    (Opcode::SBC, Mode::ABS, 4, false),
+    (Opcode::INC, Mode::ABS, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::BEQ, Mode::REL, 2, true),
+    (Opcode::SBC, Mode::ZIY, 5, true),
+    (Opcode::XXX, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 8, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::SBC, Mode::ZPX, 4, false),
+    (Opcode::INC, Mode::ZPX, 6, false),
+    (Opcode::XXX, Mode::IMP, 6, false),
+    (Opcode::SED, Mode::IMP, 2, false),
+    (Opcode::SBC, Mode::ABY, 4, true),
+    (Opcode::NOP, Mode::IMP, 2, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
+    (Opcode::NOP, Mode::IMP, 4, false),
+    (Opcode::SBC, Mode::ABX, 4, true),
+    (Opcode::INC, Mode::ABX, 7, false),
+    (Opcode::XXX, Mode::IMP, 7, false),
 ];
 
-pub struct CPU6502 {
-    mem: Rc<RefCell<dyn IO>>,
-
+pub struct CPU6502<T: IO> {
+    pub mem: T,
     /// Program counter
     pub pc: u16,
     /// Accmulator
@@ -499,15 +503,18 @@ pub struct CPU6502 {
     // Total cycle count
     pub cycles: u64,
 
+    // Total number of instructions executed
+    pub instructions: usize,
+
     // Current instruction
-    pub instruction: Instruction,
+    pub instruction: Option<(u16, Instruction)>,
     pub op_addr: u16,
     pub cycles_left: u8,
 }
 
-impl CPU6502 {
-    pub fn new(mem: Rc<RefCell<dyn IO>>) -> Self {
-        let cpu = CPU6502 {
+impl<T: IO> CPU6502<T> {
+    pub fn new(mem: T) -> Self {
+        CPU6502 {
             mem,
             pc: 0,
             a: 0,
@@ -516,12 +523,11 @@ impl CPU6502 {
             sp: 0,
             p: Status::empty(),
             cycles: 0,
-            instruction: INSTRUCTIONS[0],
+            instruction: None,
             op_addr: 0,
             cycles_left: 0,
-        };
-
-        cpu
+            instructions: 0,
+        }
     }
 
     /// Reset the CPU to an initial good state.
@@ -545,15 +551,18 @@ impl CPU6502 {
         self.sp = sp;
         self.p = status;
 
-        self.instruction = INSTRUCTIONS[0];
+        self.instruction = None;
         self.op_addr = 0;
         self.cycles_left = 0;
     }
 
-    pub fn execute(&mut self, (opcode, mode, cycles, op): Instruction) {
-        self.instruction = (opcode, mode, cycles, op);
+    pub fn execute(&mut self, instruction: Instruction) {
+        let (opcode, mode, cycles, can_cross_page_boundary) = instruction;
+        self.instruction = Some((self.pc, instruction));
+        self.instructions += 1;
+        self.cycles_left = cycles - 1;
 
-        match mode {
+        let crossed_page_boundary = match mode {
             Mode::ABS => self.abs(),
             Mode::ABX => self.abx(),
             Mode::ABY => self.aby(),
@@ -565,26 +574,92 @@ impl CPU6502 {
             Mode::REL => self.rel(),
             Mode::ZIX => self.zix(),
             Mode::ZIY => self.ziy(),
-            Mode::ACC | Mode::IMP => {}
+            Mode::ACC => self.acc(),
+            Mode::IMP => self.imp(),
         };
 
-        self.cycles_left = cycles;
+        if crossed_page_boundary && can_cross_page_boundary {
+            self.cycles_left += 1;
+        }
 
-        op(self);
+        match opcode {
+            Opcode::ADC => self.adc(),
+            Opcode::AND => self.and(),
+            Opcode::ASL => self.asl(),
+            Opcode::ASL_A => self.asl_a(),
+            Opcode::BCC => self.bcc(),
+            Opcode::BCS => self.bcs(),
+            Opcode::BEQ => self.beq(),
+            Opcode::BIT => self.bit(),
+            Opcode::BMI => self.bmi(),
+            Opcode::BNE => self.bne(),
+            Opcode::BPL => self.bpl(),
+            Opcode::BRK => self.brk(),
+            Opcode::BVC => self.bvc(),
+            Opcode::BVS => self.bvs(),
+            Opcode::CLC => self.clc(),
+            Opcode::CLD => self.cld(),
+            Opcode::CLI => self.cli(),
+            Opcode::CLV => self.clv(),
+            Opcode::CMP => self.cmp(),
+            Opcode::CPX => self.cpx(),
+            Opcode::CPY => self.cpy(),
+            Opcode::DEC => self.dec(),
+            Opcode::DEX => self.dex(),
+            Opcode::DEY => self.dey(),
+            Opcode::EOR => self.eor(),
+            Opcode::INC => self.inc(),
+            Opcode::INX => self.inx(),
+            Opcode::INY => self.iny(),
+            Opcode::JMP => self.jmp(),
+            Opcode::JSR => self.jsr(),
+            Opcode::LDA => self.lda(),
+            Opcode::LDX => self.ldx(),
+            Opcode::LDY => self.ldy(),
+            Opcode::LSR => self.lsr(),
+            Opcode::LSR_A => self.lsr_a(),
+            Opcode::NOP => self.nop(),
+            Opcode::ORA => self.ora(),
+            Opcode::PHA => self.pha(),
+            Opcode::PHP => self.php(),
+            Opcode::PLA => self.pla(),
+            Opcode::PLP => self.plp(),
+            Opcode::ROL => self.rol(),
+            Opcode::ROL_A => self.rol_a(),
+            Opcode::ROR => self.ror(),
+            Opcode::ROR_A => self.ror_a(),
+            Opcode::RTI => self.rti(),
+            Opcode::RTS => self.rts(),
+            Opcode::SBC => self.sbc(),
+            Opcode::SEC => self.sec(),
+            Opcode::SED => self.sed(),
+            Opcode::SEI => self.sei(),
+            Opcode::STA => self.sta(),
+            Opcode::STX => self.stx(),
+            Opcode::STY => self.sty(),
+            Opcode::TAX => self.tax(),
+            Opcode::TAY => self.tay(),
+            Opcode::TSX => self.tsx(),
+            Opcode::TXA => self.txa(),
+            Opcode::TXS => self.txs(),
+            Opcode::TYA => self.tya(),
+            Opcode::XXX => self.xxx(),
+        };
     }
 
     pub fn clock(&mut self) {
-        if self.cycles_left == 0 {
-            let opcode = self.pop_u8();
+        self.cycles += 1;
 
-            let instruction = INSTRUCTIONS[opcode as usize];
-
-            self.cycles_left = instruction.2;
-            self.execute(instruction);
+        if self.cycles_left > 0 {
+            self.cycles_left -= 1;
+            return;
         }
 
-        self.cycles += 1;
-        self.cycles_left -= 1;
+        let opcode = self.pop_u8();
+        let instruction = INSTRUCTIONS[opcode as usize];
+        self.execute(instruction);
+
+        // self.cycles_left = 0;
 
         if (DEBUG) {
             self.print_state();
@@ -644,42 +719,63 @@ impl CPU6502 {
     }
 
     pub fn decode_instruction(&mut self) -> String {
-        let formatted_operand = match self.instruction.1 {
-            Mode::IMP => "".to_string(),
-            Mode::IMM => format!("#${:02X}", self.read(self.op_addr)),
-            Mode::ACC => "A".to_string(),
-            Mode::ABS => format!("${:04X}", self.op_addr),
-            Mode::ABX => format!("${:04X},X", self.op_addr),
-            Mode::ABY => format!("${:04X},Y", self.op_addr),
-            Mode::ZPG => format!("${:02X}", self.op_addr),
-            Mode::ZPX => format!("${:02X},X", self.op_addr),
-            Mode::ZPY => format!("${:02X},Y", self.op_addr),
-            Mode::ZIX => format!("(${:02X},X)", self.op_addr),
-            Mode::ZIY => format!("(${:02X},Y)", self.op_addr),
-            Mode::IND => format!("(${:04X})", self.op_addr),
-            Mode::REL => format!("${:04X}", self.op_addr),
-        };
-        format!("{:#?} {}", self.instruction.0, &formatted_operand)
+        if let Some(instruction) = self.instruction {
+            let formatted_operand = match instruction.1 .1 {
+                Mode::IMP => "".to_string(),
+                Mode::IMM => format!("#${:02X}", self.read(self.op_addr)),
+                Mode::ACC => "A".to_string(),
+                Mode::ABS => format!("${:04X}", self.op_addr),
+                Mode::ABX => format!("${:04X},X", self.op_addr),
+                Mode::ABY => format!("${:04X},Y", self.op_addr),
+                Mode::ZPG => format!("${:02X}", self.op_addr),
+                Mode::ZPX => format!("${:02X},X", self.op_addr),
+                Mode::ZPY => format!("${:02X},Y", self.op_addr),
+                Mode::ZIX => format!("(${:02X},X)", self.op_addr),
+                Mode::ZIY => format!("(${:02X},Y)", self.op_addr),
+                Mode::IND => format!("(${:04X})", self.op_addr),
+                Mode::REL => format!("${:04X}", self.op_addr),
+            };
+            format!("{:#?} {}", instruction.1, &formatted_operand)
+        } else {
+            "".to_string()
+        }
     }
 
     // Addresing Modes
     //
     //
 
+    /// Implied
+    #[inline]
+    fn imp(&mut self) -> bool {
+        false
+    }
+
+    // Accumulator
+    #[inline]
+    fn acc(&mut self) -> bool {
+        false
+    }
+
     /// Absolute
-    fn abs(&mut self) {
+    #[inline]
+    fn abs(&mut self) -> bool {
         self.op_addr = self.pop_u16();
+        false
     }
 
     // Immediate
-    fn imm(&mut self) {
+    #[inline]
+    fn imm(&mut self) -> bool {
         let addr = self.pc;
         self.pc += 1;
         self.op_addr = addr;
+        false
     }
 
     /// Absolute Indirect
-    fn ind(&mut self) {
+    #[inline]
+    fn ind(&mut self) -> bool {
         let addr_ptr = self.pop_u16();
 
         let lo = self.read(addr_ptr) as u16;
@@ -687,18 +783,22 @@ impl CPU6502 {
         let addr = (hi << 8) | lo;
 
         self.op_addr = addr;
+        false
     }
 
     /// Zero Page
-    fn zpg(&mut self) {
+    #[inline]
+    fn zpg(&mut self) -> bool {
         let lo = self.pop_u8();
         let addr = 0x0000 | (lo as u16);
 
         self.op_addr = addr;
+        false
     }
 
     /// Zero Page, X-Indexed
-    fn zpx(&mut self) {
+    #[inline]
+    fn zpx(&mut self) -> bool {
         let lo = self.pop_u8();
         // No carry:
         // Even though the final value is 16 bits,
@@ -707,10 +807,12 @@ impl CPU6502 {
         let addr = 0x0000 | (lo_idx as u16);
 
         self.op_addr = addr;
+        false
     }
 
     /// Zero Page, Y-Indexed
-    fn zpy(&mut self) {
+    #[inline]
+    fn zpy(&mut self) -> bool {
         let lo = self.pop_u8();
         // No carry:
         // Even though the final value is 16 bits,
@@ -719,37 +821,37 @@ impl CPU6502 {
         let addr = 0x0000 | (lo_idx as u16);
 
         self.op_addr = addr;
+        false
     }
 
     /// Absolute, X-Indexed
-    fn abx(&mut self) {
+    fn abx(&mut self) -> bool {
         self.abs();
         let abs_addr = self.op_addr;
+
         // Carry offset
         let addr = abs_addr + self.x as u16;
-        if self.crossed_page_boundary(addr) {
-            self.cycles_left += 1;
-        }
 
         self.op_addr = addr;
+        self.crossed_page_boundary(abs_addr, addr)
     }
 
     /// Absolute, Y-Indexed
-    fn aby(&mut self) {
+    #[inline]
+    fn aby(&mut self) -> bool {
         self.abs();
         let abs_addr = self.op_addr;
 
         // Carry offset
         let addr = abs_addr + self.y as u16;
-        if self.crossed_page_boundary(addr) {
-            self.cycles_left += 1;
-        }
 
         self.op_addr = addr;
+        self.crossed_page_boundary(abs_addr, addr)
     }
 
     /// Relative
-    fn rel(&mut self) {
+    #[inline]
+    fn rel(&mut self) -> bool {
         // offset is a 1-byte signed value:
         //
         // 0x00 - 0xFD is positive (0 - 127)
@@ -767,6 +869,9 @@ impl CPU6502 {
         };
 
         self.op_addr = addr;
+
+        // Branch functions will add a cycle if the page boundary was crossed
+        false
     }
 
     /// Zero Page Indirect, X-Indexed
@@ -774,7 +879,8 @@ impl CPU6502 {
     /// Operand is zero page address.
     /// Absolute address is word in (OP + X, OP + X + 1).
     /// No carry.
-    fn zix(&mut self) {
+    #[inline]
+    fn zix(&mut self) -> bool {
         let ptr_lo = self.pop_u8();
         let ptr_lo_idx = ptr_lo.wrapping_add(self.x);
         let ptr = 0x0000 | (ptr_lo_idx as u16);
@@ -784,26 +890,25 @@ impl CPU6502 {
         let addr = (hi << 8) | lo;
 
         self.op_addr = addr;
+        false
     }
 
     /// Zero Page Indirect, Y-Indexed
     ///
     /// Operand is zero page address.
     /// Absolute address is word in (OP, OP + 1) offset by Y.
-    fn ziy(&mut self) {
+    #[inline]
+    fn ziy(&mut self) -> bool {
         self.zpg();
         let ptr = self.op_addr;
 
         let lo = self.read(ptr) as u16;
         let hi = self.read(ptr + 1) as u16;
-        let mut addr = (hi << 8) | lo;
-        if self.crossed_page_boundary(addr) {
-            self.cycles_left += 1;
-        }
-
-        addr += self.y as u16;
-
+        let abs_addr = (hi << 8) | lo;
+        let addr = abs_addr + self.y as u16;
         self.op_addr = addr;
+
+        self.crossed_page_boundary(abs_addr, addr)
     }
 
     //
@@ -815,12 +920,7 @@ impl CPU6502 {
     /// XXX - Illegal Instruction
     ///
     fn xxx(&mut self) {
-        dbg!(
-            "XXX - Illegal Instruction: ({}, {}, {})",
-            self.instruction.0,
-            self.instruction.1,
-            self.instruction.2
-        );
+        dbg!("XXX - Illegal Instruction: ({})", self.instruction);
     }
 
     /// ADC - Add with Carry
@@ -829,7 +929,11 @@ impl CPU6502 {
         let acc = self.a;
         let op = self.read(self.op_addr);
 
-        self.add_a_(acc, op);
+        if !self.p.contains(Status::D) {
+            self.add_a_(acc, op);
+        } else {
+            self.add_dec_(acc, op);
+        }
     }
 
     /// AND - Logical And
@@ -955,7 +1059,7 @@ impl CPU6502 {
         let ror_value = self.ror_(byte);
         self.write(self.op_addr, ror_value);
 
-        self.set_arithmetic_status(byte);
+        self.set_arithmetic_status(ror_value);
     }
 
     fn ror_a(&mut self) {
@@ -985,34 +1089,37 @@ impl CPU6502 {
         ror_value
     }
 
-    /// BRK - Break
-    ///
-    fn brk(&mut self) {
-        self.p.set(Status::B, true);
-        self.irq();
-    }
-
     /// SBC - Subtract with Carry
     ///
     fn sbc(&mut self) {
         let acc = self.a;
-        // One's complement
-        // Don't add 1 since we're adding the carry bit.
-        let op = self.read(self.op_addr) ^ 0xFF;
 
-        self.add_a_(acc, op);
+        if !self.p.contains(Status::D) {
+            // One's complement
+            // Don't add 1 since we're adding the carry bit.
+            let op = self.read(self.op_addr) ^ 0xFF;
+            self.add_a_(acc, op);
+        } else {
+            // Nine's complement
+            let mut op = self.read(self.op_addr);
+            let op_lo = 9 - (op & 0xf);
+            let op_hi = 9 - (op >> 4);
+            op = (op_hi << 4) | op_lo;
+
+            self.add_dec_(acc, op);
+        }
     }
 
-    fn add_a_(&mut self, acc: u8, val: u8) {
-        let carry_bit = (self.p & Status::C).bits();
-        let result = acc.wrapping_add(val).wrapping_add(carry_bit);
-        self.a = result;
+    #[inline]
+    fn add_a_(&mut self, a: u8, m: u8) {
+        let c = (self.p & Status::C).bits();
+        let sum: u16 = (a as u16) + (m as u16) + (c as u16);
 
-        // Set Carry flag
-        //
-        // Carry if MSB flipped.
-        // This could _either_ indicate a change of sign or an overflow.
-        self.p.set(Status::C, result < acc);
+        self.a = sum as u8;
+
+        // Set carry flag if the sum exceeds 255, otherwise unset it
+        // (sum >> 8) == 1 is equivalent to sum > 0xFF
+        self.p.set(Status::C, (sum >> 8) == 1);
 
         // Set Overflow flag
         //
@@ -1020,7 +1127,46 @@ impl CPU6502 {
         // adding two values with the same sign (P + P or N + N).
         self.p.set(
             Status::V,
-            result & 0x80 != acc & 0x80 && result & 0x80 != val & 0x80,
+            self.a & 0x80 != a & 0x80 && self.a & 0x80 != m & 0x80,
+        );
+
+        self.set_arithmetic_status(self.a);
+    }
+
+    #[inline]
+    fn add_dec_(&mut self, a: u8, m: u8) {
+        // BCD stores two digits (0-9) in a byte
+        // Sum hi and lo digits separately, then combine
+
+        // If the sum of the lo-bit digits (plus carry) exceeds 9, add 0x6 to skip the base-16 values.
+        // Carry the 1 to the hi-bit digit
+        let c = (self.p & Status::C).bits();
+        let mut lo_carry = 0;
+        let mut lo_sum: u8 = (a & 0xF) + (m & 0xF) + c;
+        if lo_sum > 9 {
+            lo_sum += 0x6;
+            lo_carry = 0x1;
+        }
+
+        // If the sum of the hi-bit digits (plus lo-bit carry) exceeds 9, wrap around.
+        let mut hi_sum: u8 = (a >> 4) + (m >> 4) + lo_carry;
+        if hi_sum > 9 {
+            hi_sum -= 10;
+            self.p.set(Status::C, true);
+        } else {
+            self.p.set(Status::C, false);
+        }
+
+        let sum: u8 = (hi_sum << 4) | (lo_sum & 0xF);
+        self.a = sum;
+
+        // Set Overflow flag
+        //
+        // Indicate overflow to negate the N flag when
+        // adding two values with the same sign (P + P or N + N).
+        self.p.set(
+            Status::V,
+            self.a & 0x80 != a & 0x80 && self.a & 0x80 != m & 0x80,
         );
 
         self.set_arithmetic_status(self.a);
@@ -1093,7 +1239,7 @@ impl CPU6502 {
     #[inline]
     fn branch_(&mut self) {
         // Add another cycle if page boundary was crossed.
-        if self.crossed_page_boundary(self.op_addr) {
+        if self.crossed_page_boundary(self.pc + 1, self.op_addr) {
             self.cycles_left += 1;
         }
 
@@ -1147,7 +1293,7 @@ impl CPU6502 {
     /// M+1 -> M,N,Z
     fn inc(&mut self) {
         let m = self.read(self.op_addr);
-        let result = m + 1;
+        let result = m.wrapping_add(1);
         self.write(self.op_addr, result);
         self.set_arithmetic_status(result);
     }
@@ -1216,11 +1362,12 @@ impl CPU6502 {
     ///
     /// http://www.obelisk.me.uk/6502/reference.html#JSR
     fn jsr(&mut self) {
-        let pc_hi = (self.pc >> 8) as u8;
-        let pc_lo = (self.pc) as u8;
+        let ret_addr = self.pc - 1;
 
-        self.push_stack(pc_hi);
-        self.push_stack(pc_lo);
+        let ret_addr_hi = (ret_addr >> 8) as u8;
+        let ret_addr_lo = ret_addr as u8;
+        self.push_stack(ret_addr_hi);
+        self.push_stack(ret_addr_lo);
 
         self.pc = self.op_addr;
     }
@@ -1247,7 +1394,7 @@ impl CPU6502 {
         let pc_hi = self.pop_stack() as u16;
 
         let pc = (pc_hi << 8) | pc_lo;
-        self.pc = pc;
+        self.pc = pc + 1;
     }
 
     /// LDA - Load Accumulator With Memory
@@ -1294,7 +1441,9 @@ impl CPU6502 {
     /// PHP - Push Processor Status
     ///
     fn php(&mut self) {
-        self.push_stack(self.p.bits());
+        // Bits 4 and 5 are set to 1 when pushed to the stack
+        let php_bits = self.p | Status::B | Status::U;
+        self.push_stack(php_bits.bits());
     }
 
     /// PLA - Pull Accumulator from Stack
@@ -1310,6 +1459,9 @@ impl CPU6502 {
         self.p = Status::from_bits(self.pop_stack()).expect("Could not restore status register")
             & !(Status::B)
             | Status::U;
+
+        // self.p = Status::from_bits(self.pop_stack()).expect("Could not restore status register")
+        //     | (Status::B | Status::U);
     }
 
     /// SEC - Set Carry
@@ -1384,7 +1536,6 @@ impl CPU6502 {
     /// X -> SP
     fn txs(&mut self) {
         self.sp = self.x;
-        self.set_arithmetic_status(self.sp);
     }
 
     /// TXA - Transfer Y to Accumulator
@@ -1392,6 +1543,15 @@ impl CPU6502 {
     fn tya(&mut self) {
         self.a = self.y;
         self.set_arithmetic_status(self.a);
+    }
+
+    /// BRK - Break
+    ///
+    fn brk(&mut self) {
+        self.p.set(Status::B, true);
+        self.pc += 1;
+
+        self.interrupt_(0xFFFE);
     }
 
     //
@@ -1417,14 +1577,12 @@ impl CPU6502 {
     fn interrupt_(&mut self, vector_addr: u16) {
         // Push PC onto the stack
 
-        let pc_lo = (0x00FF & self.pc) as u8;
-        let pc_hi = ((0xFF00 & self.pc) >> 8) as u8;
+        let pc_hi = (self.pc >> 8) as u8;
+        let pc_lo = self.pc as u8;
 
         self.push_stack(pc_hi);
         self.push_stack(pc_lo);
-
-        // Push status register onto the stack (with clear B flag)
-        self.push_stack((self.p & !Status::B).bits());
+        self.push_stack((self.p).bits());
 
         // Set PC to address from vector
         let addr_lo = self.read(vector_addr) as u16;
@@ -1433,13 +1591,12 @@ impl CPU6502 {
 
         // Set I flag
         self.p.set(Status::I, true);
-
         self.pc = addr;
     }
 
     #[inline]
-    fn crossed_page_boundary(&self, addr: u16) -> bool {
-        addr & 0xFF00 != self.pc & 0xFF00
+    fn crossed_page_boundary(&self, addr1: u16, addr2: u16) -> bool {
+        addr1 & 0xFF00 != addr2 & 0xFF00
     }
 
     #[inline]
@@ -1481,556 +1638,20 @@ impl CPU6502 {
     }
 
     fn pop_stack(&mut self) -> u8 {
-        let stkp = STACK + (self.sp as u16);
-        let byte = self.read(stkp + 1);
-
         self.sp = self.sp.wrapping_add(1);
+
+        let stkp = STACK + (self.sp as u16);
+        let byte = self.read(stkp);
 
         byte
     }
 }
 
-impl IO for CPU6502 {
+impl<T: IO> IO for CPU6502<T> {
     fn read(&mut self, addr: u16) -> u8 {
-        self.mem.borrow_mut().read(addr)
+        self.mem.read(addr)
     }
     fn write(&mut self, addr: u16, data: u8) {
-        self.mem.borrow_mut().write(addr, data)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use crate::mem::Memory;
-
-    fn create_test_cpu(mem: &[u8]) -> CPU6502 {
-        let mut m = Memory::new();
-        m.load(mem, 0);
-        CPU6502::new(Rc::new(RefCell::new(m)))
-    }
-
-    #[test]
-    fn test_reset() {
-        let mut c = create_test_cpu(&[]);
-        c.reset();
-
-        // Set initial program counter
-        c.write(0xFFFC, 0x34);
-        c.write(0xFFFC + 1, 0x12);
-
-        assert_eq!(c.mem.borrow_mut().read(0xFFFC), 0x34);
-
-        c.reset();
-
-        assert_eq!(c.p, Status::U);
-        assert_eq!(c.pc, 0x1234);
-    }
-
-    // #[test]
-    // fn test_imm() {
-    //     let mut cpu = create_cpu();
-    //     cpu.write(0x0000, 0x05);
-    //     cpu.imm();
-    //     assert_eq!(cpu.read(cpu.op_addr), 0x05);
-    // }
-
-    #[test]
-    fn test_jmp_ind() {
-        let mut c = create_test_cpu(&[
-            // JMP ($0120)
-            0x6C, 0x20, 0x01,
-        ]);
-        c.reset();
-
-        // Address to jump to
-        c.write(0x0120, 0xFC);
-        c.write(0x0121, 0xBA);
-
-        c.write(0x0120, 0xFC);
-
-        c.clock();
-
-        assert_eq!(c.pc, 0xBAFC);
-    }
-
-    #[test]
-    fn test_jmp_abs() {
-        let mut c = create_test_cpu(&[
-            // JMP $0120
-            0x4C, 0x20, 0x01,
-        ]);
-        c.reset();
-
-        c.clock();
-
-        assert_eq!(c.pc, 0x0120);
-    }
-
-    #[test]
-    fn test_lda_imm() {
-        let mut c = create_test_cpu(&[
-            // LDA #51
-            0xA9, 0x33,
-        ]);
-        c.reset();
-
-        c.clock();
-
-        assert_eq!(c.a, 0x33);
-    }
-
-    #[test]
-    fn test_lda_abs() {
-        let mut c = create_test_cpu(&[
-            // LDA $80FC
-            0xAD, 0xFC, 0x80,
-        ]);
-        c.reset();
-
-        // Target value
-        c.write(0x80FC, 0x2B);
-
-        c.clock();
-
-        assert_eq!(c.a, 0x2B);
-    }
-
-    #[test]
-    fn test_sta_abs() {
-        let mut c = create_test_cpu(&[
-            // STA $0xAB
-            0x8D, 0xAB,
-        ]);
-        c.reset();
-        c.a = 0x33;
-
-        c.clock();
-
-        assert_eq!(c.mem.borrow_mut().read(0xAB), 0x33);
-    }
-
-    #[test]
-    fn test_rel_pos() {
-        let mut c = create_test_cpu(&[]);
-        c.reset();
-
-        c.write(0x2000, 0x05);
-        c.pc = 0x2000;
-        c.rel();
-        assert_eq!(c.op_addr, 0x2006);
-    }
-
-    #[test]
-    fn test_rel_neg() {
-        let mut c = create_test_cpu(&[]);
-        c.reset();
-
-        c.write(0x2000, 0x85);
-        c.pc = 0x2000;
-        c.rel();
-        assert_eq!(c.op_addr, 0x1F86);
-    }
-
-    #[test]
-    fn test_zix() {
-        let mut c = create_test_cpu(&[]);
-        c.reset();
-        c.x = 0x04;
-        c.write(0x0000, 0x20);
-        c.write(0x0024, 0x74);
-        c.write(0x0025, 0x20);
-        c.zix();
-        assert_eq!(c.op_addr, 0x2074);
-    }
-
-    #[test]
-    fn test_ziy() {
-        let mut c = create_test_cpu(&[]);
-        c.reset();
-        c.y = 0x04;
-        c.write(0x0000, 0x20);
-        c.write(0x0020, 0x74);
-        c.write(0x0021, 0x20);
-        c.ziy();
-        assert_eq!(c.op_addr, 0x2078);
-    }
-
-    #[test]
-    fn test_zpx() {
-        let mut c = create_test_cpu(&[]);
-        // Test typical
-        c.reset();
-        c.x = 0x0F;
-        c.write(0x0000, 0x80);
-        c.zpx();
-        assert_eq!(c.op_addr, 0x008F);
-
-        // Test w/wrap-around in lo bit
-        c.reset();
-        c.x = 0xFF;
-        c.write(0x0000, 0x80);
-        c.zpx();
-        assert_eq!(c.op_addr, 0x007F);
-    }
-
-    #[test]
-    fn test_asl() {
-        let mut c = create_test_cpu(&[
-            // ASL A
-            0x0A,
-        ]);
-
-        c.reset();
-
-        c.a = 2;
-        c.clock();
-        assert_eq!(c.a, 4);
-        // cpu.a = 2;
-        // cpu.write(0x0, 0x0A);
-        // cpu.clock();
-        // assert_eq!(cpu.a, 4);
-
-        // With carry
-        c.reset();
-        c.a = 0x90;
-        c.clock();
-        assert_eq!(c.a, 0x20);
-        assert_eq!(c.p & Status::C, Status::C);
-    }
-
-    #[test]
-    fn test_dex() {
-        let mut c = create_test_cpu(&[
-            // DEX
-            0xCA,
-        ]);
-
-        // From positive to positive (5 -> 4)
-        c.reset();
-        c.x = 0x05;
-        c.clock();
-        assert_eq!(c.x, 0x04);
-        // From positive to zero (1 -> 0)
-        c.reset();
-        c.x = 0x01;
-        c.clock();
-        assert_eq!(c.x, 0x00);
-        assert_eq!(c.p & Status::Z, Status::Z);
-
-        // From positive to negative (0 -> -1)
-        c.reset();
-        c.x = 0x00;
-        c.clock();
-        assert_eq!(c.x, 0xFF);
-        assert_eq!(c.p & Status::N, Status::N);
-    }
-
-    #[test]
-    fn test_and() {
-        let mut c = create_test_cpu(&[
-            // AND #$0x74
-            0x29, 0x74,
-        ]);
-
-        c.reset();
-        c.a = 0x58;
-        c.clock();
-        assert_eq!(c.a, 0x50);
-    }
-
-    #[test]
-    fn test_beq() {
-        let mut c = create_test_cpu(&[
-            // BEQ ($0x10)
-            0xF0, 0x10,
-        ]);
-
-        // Take branch
-        c.reset();
-        c.p.set(Status::Z, true);
-        c.clock();
-        assert_eq!(c.pc, 0x12);
-        assert_eq!(c.cycles_left, 2);
-
-        // Don't take branch
-        c.reset();
-        c.clock();
-        assert_eq!(c.pc, 0x02);
-        assert_eq!(c.cycles_left, 1);
-
-        // Pass page boundary
-        c.write(0x00F5, 0xF0);
-        c.write(0x00F6, 0x40);
-        c.reset();
-        c.pc = 0x00F5;
-        c.p.set(Status::Z, true);
-        c.clock();
-        assert_eq!(c.pc, 0x0137);
-        // assert_eq!(c.pc, 0x11);
-        assert_eq!(c.cycles_left, 3);
-    }
-
-    #[test]
-    fn test_bmi() {
-        let mut c = create_test_cpu(&[
-            // BMI $0x10
-            0x30, 0x10,
-        ]);
-        c.reset();
-        c.p.set(Status::N, true);
-        c.clock();
-        assert_eq!(c.pc, 0x12);
-
-        c.reset();
-        c.p.set(Status::N, false);
-        c.clock();
-        assert_eq!(c.pc, 0x02);
-    }
-
-    #[test]
-    fn test_adc() {
-        let mut c = create_test_cpu(&[
-            // ADC #$05
-            0x69, 0x05,
-        ]);
-
-        // P + P = P
-        // No carry
-        // 9 + 5 = 14
-        c.reset();
-        c.a = 0x09;
-        c.clock();
-        assert_eq!(c.a, 0x0E);
-        assert_eq!(c.p, Status::U);
-
-        let mut c = create_test_cpu(&[
-            // ADC #$05
-            0x69, 0x05,
-        ]);
-
-        // P + P = P (overflow)
-        // No carry
-        // 127 + 5 = 132
-        c.reset();
-        c.a = 0x7F;
-        c.clock();
-        assert_eq!(c.a, 0x84);
-        assert_eq!(c.p, Status::U | Status::V | Status::N);
-
-        // P + N = P
-        // Carry
-        // 127 - 16 = 111
-
-        let mut c = create_test_cpu(&[
-            // ADC #$05
-            // ADC #$F0 % add -16
-            0x69, 0xF0,
-        ]);
-
-        c.reset();
-
-        c.a = 0x7F;
-        c.clock();
-        assert_eq!(c.a, 0x6F);
-        assert_eq!(c.p, Status::U | Status::C);
-
-        // P + N = N
-        // No carry
-        // 16 - 32 = -16
-        c.reset();
-
-        let mut c = create_test_cpu(&[
-            // ADC #$E0 % add -32
-            0x69, 0xE0,
-        ]);
-        c.reset();
-
-        c.a = 0x10;
-        c.clock();
-        assert_eq!(c.a, 0xF0);
-        assert_eq!(c.p, Status::N | Status::U);
-
-        // N + N = N
-        // Carry
-
-        let mut c = create_test_cpu(&[
-            // ADC #$FF % add -1
-            0x69, 0xFF,
-        ]);
-
-        c.reset();
-
-        c.a = 0x90;
-        c.clock();
-        assert_eq!(c.a, 0x8F);
-        assert_eq!(c.p, Status::N | Status::U | Status::C);
-
-        // N + N = N (overflow)
-        // Carry
-        let mut c = create_test_cpu(&[
-            // ADC #$A0
-            0x69, 0xA0,
-        ]);
-
-        c.reset();
-        c.a = 0x90;
-        c.clock();
-        assert_eq!(c.a, 0x30);
-        assert_eq!(c.p, Status::V | Status::U | Status::C);
-    }
-
-    #[test]
-    fn test_sbc() {
-        let mut c = create_test_cpu(&[
-            // SBC #$05
-            0xE9, 0x05,
-        ]);
-
-        // P - P = P
-        // Carry bit not set
-        // 9 - 5 = 3 (!!)
-        c.reset();
-        c.a = 0x09;
-        c.clock();
-        assert_eq!(c.a, 0x03);
-        assert_eq!(c.p, Status::U | Status::C);
-
-        // P - P = P
-        // Carry bit set
-        // 9 - 5 = 4
-        let mut c = create_test_cpu(&[
-            // SBC #$05
-            0xE9, 0x05,
-        ]);
-        c.reset();
-        c.p.set(Status::C, true);
-        c.a = 0x09;
-        c.clock();
-        assert_eq!(c.a, 0x04);
-        assert_eq!(c.p, Status::U | Status::C);
-    }
-
-    #[test]
-    fn test_ora() {
-        let mut c = create_test_cpu(&[
-            // ORA $AB12
-            0x0D, 0x12, 0xAB,
-        ]);
-        c.a = 0x03;
-        c.write(0xab12, 0x05);
-        c.clock();
-        assert_eq!(c.a, 0x07);
-    }
-
-    #[test]
-    fn test_pla() {
-        let mut c = create_test_cpu(&[
-            // PLA
-            0x68,
-        ]);
-
-        // Stack underflow
-        //
-        //c.reset();
-        // c.sp = 0xFF;
-        // m.load(
-        //     &[
-        //         // PLA
-        //         0x68
-        //     ]
-        // );
-        // c.clock();
-
-        // Pull one value
-        c.reset();
-        c.sp = 0xFE;
-        c.write(0x01FF, 0xAB);
-
-        c.clock();
-        assert_eq!(c.a, 0xAB);
-        assert_eq!(c.sp, 0xFF);
-    }
-
-    #[test]
-    fn test_pha() {
-        let mut c = create_test_cpu(&[
-            // PHA
-            0x48,
-        ]);
-
-        // Stack overflow
-        //
-        //c.reset();
-        // c.sp = 0;
-        // c.a = 0xAB;
-        // m.load(
-        //     &[
-        //         // PHA
-        //         0x48
-        //     ]
-        // );
-        // c.clock();
-
-        // Push one value
-        c.reset();
-        c.sp = 0xFF;
-        c.a = 0xAB;
-
-        c.clock();
-        assert_eq!(c.read(0x01FF), 0xAB);
-        assert_eq!(c.sp, 0xFE);
-    }
-
-    #[test]
-    fn test_plp() {
-        let mut c = create_test_cpu(&[
-            // SEC; PHP; CLC; PLP
-            0x38, 0x08, 0x18, 0x28,
-        ]);
-        c.reset();
-        c.clock();
-        assert_eq!(c.p, Status::U | Status::C);
-    }
-
-    #[test]
-    fn test_tax() {
-        let mut c = create_test_cpu(&[
-            // TAX
-            0xAA,
-        ]);
-
-        c.reset();
-        c.a = 0xAB;
-
-        c.clock();
-        assert_eq!(c.x, 0xAB);
-    }
-
-    #[test]
-    fn test_bit() {
-        let mut c = create_test_cpu(&[]);
-        c.a = 0b1;
-
-        c.write(0, 0b0);
-        c.bit();
-        assert_eq!(c.p, Status::Z);
-
-        c.write(0, 0b1);
-        c.bit();
-        assert_eq!(c.p, Status::empty());
-
-        c.write(0, 0b11000001);
-        c.bit();
-        assert_eq!(c.p, Status::N | Status::V);
-
-        c.write(0, 0b10000001);
-        c.bit();
-        assert_eq!(c.p, Status::N);
-
-        c.write(0, 0b01000001);
-        c.bit();
-        assert_eq!(c.p, Status::V);
+        self.mem.write(addr, data)
     }
 }
