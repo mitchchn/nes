@@ -1,4 +1,4 @@
-use std::{io::stdout, borrow::BorrowMut};
+use std::{borrow::BorrowMut, io::stdout};
 
 use crossterm::{
     event::{self, Event, KeyCode},
@@ -45,7 +45,7 @@ impl Tui {
 
                 let left_layout = Layout::default()
                     .direction(Direction::Vertical)
-                    .constraints([Constraint::Length(10), Constraint::Min(10)])
+                    .constraints([Constraint::Length(100)])
                     .split(main_layout[0]);
 
                 let right_layout = Layout::default()
@@ -53,11 +53,16 @@ impl Tui {
                     .constraints([Constraint::Length(21), Constraint::Min(0)])
                     .split(main_layout[1]);
 
-                let color_flag = |f: u8| {
+                let right_layout_inner = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Length(21), Constraint::Min(0)])
+                    .split(right_layout[0]);
+
+                let color_flag = |f: u8, ch: &str| {
                     if f == 1 {
-                        format!("{} ", f).green()
+                        Span::from(format!("{} ", ch).fg(Color::Green).bold())
                     } else {
-                        Span::raw(format!("{} ", f).to_string())
+                        Span::raw(format!("{} ", ch).to_string()).fg(Color::Gray)
                     }
                 };
 
@@ -73,24 +78,24 @@ impl Tui {
                 ];
 
                 let status_header = Line::styled(
-                    "PC    A  X  Y    SP    N V - B D I Z C",
-                    Style::default().bold(),
+                    "PC    A  X  Y    SP",
+                    Style::default().fg(Color::Magenta).bold(),
                 );
-                let status_line = Line::from(vec![
-                    format!(
-                        "{:04X}  {:02X} {:02X} {:02X}   {:02X}    ",
-                        cpu.pc, cpu.a, cpu.x, cpu.y, cpu.sp
-                    )
-                    .into(),
-                    color_flag(f[0]),
-                    color_flag(f[1]),
-                    color_flag(f[2]),
-                    color_flag(f[3]),
-                    color_flag(f[4]),
-                    color_flag(f[5]),
-                    color_flag(f[6]),
-                    color_flag(f[7]),
-                    format!("      Cycles: {}", cpu.cycles).into(),
+                let status_line = Line::from(vec![format!(
+                    "{:04X}  {:02X} {:02X} {:02X}   {:02X}    ",
+                    cpu.pc, cpu.a, cpu.x, cpu.y, cpu.sp
+                )
+                .into()]);
+
+                let flag_line = Line::from(vec![
+                    color_flag(f[0], "N"),
+                    color_flag(f[1], "V"),
+                    color_flag(f[2], "-"),
+                    color_flag(f[3], "B"),
+                    color_flag(f[4], "D"),
+                    color_flag(f[5], "I"),
+                    color_flag(f[6], "Z"),
+                    color_flag(f[7], "C"),
                 ]);
 
                 let command = Paragraph::new(Text::from(vec![
@@ -116,7 +121,18 @@ impl Tui {
                 ]))
                 .block(Block::default().padding(Padding::horizontal(1)));
 
-                let status_text = Text::from(vec![status_header, status_line]);
+                let cycles_line = Line::from(vec![
+                    "Cycles: ".fg(Color::Gray),
+                    format!("{}", cpu.cycles).into(),
+                ]);
+                let status_text = vec![
+                    status_header,
+                    status_line,
+                    Line::from(""),
+                    flag_line,
+                    Line::from(""),
+                    cycles_line,
+                ];
                 let status = Paragraph::new(status_text).block(
                     Block::default()
                         .title("status")
@@ -155,7 +171,7 @@ impl Tui {
                 );
 
                 // Lines visible in trace area, subtracting 4 from height for border and padding
-                let trace_lines = (left_layout[1].height - 4) as usize;
+                let trace_lines = (left_layout[0].height - 4) as usize;
                 // let trace_scroll_pos = if trace_text.lines.len() > trace_lines {
                 //     trace_text.lines.len() - trace_lines
                 // } else {
@@ -184,26 +200,45 @@ impl Tui {
                             .borders(Borders::ALL),
                     );
 
-                // Display memory as rows of 8 bytes indexed by address
-                let stack_text = Line::from(
-                    cpu.mem.mem.0[0x100..=0x1FF]
-                        .iter()
-                        .enumerate()
-                        .map(|(idx, byte)| {
-                            let byte_text = format!("{:02X} ", byte);
-                            if cpu.sp == idx as u8 {
-                                Span::styled(
-                                    byte_text,
-                                    Style::default().bg(Color::Yellow).fg(Color::White),
-                                )
-                            } else {
-                                Span::from(byte_text)
-                            }
-                        })
-                        .collect::<Vec<Span<'_>>>(),
-                );
+                let mut stack_lines = vec![];
 
-                let stack = Paragraph::new(stack_text).wrap(Wrap { trim: true }).block(
+                // Stack (ascending order so reverse from actual memory layout)
+                for (idx, byte) in cpu.mem.mem.0[0x100..=0x1FF].iter().rev().enumerate() {
+                    let addr = 0xff - idx;
+                    let byte_text = format!("{:02X}", byte);
+                    stack_lines.push(Line::from(vec![
+                        format!("{:02X}: ", addr).dark_gray(),
+                        if cpu.sp == addr as u8 {
+                            Span::styled(
+                                byte_text,
+                                Style::default().bg(Color::Yellow).fg(Color::White),
+                            )
+                        } else {
+                            byte_text.into()
+                        },
+                    ]));
+                }
+
+                // Display memory as rows of 8 bytes indexed by address
+                // let stack_text = Line::from(
+                //     cpu.mem.mem.0[0x100..=0x1FF]
+                //         .iter()
+                //         .enumerate()
+                //         .map(|(idx, byte)| {
+                //             let byte_text = format!("{:02X} ", byte);
+                //             if cpu.sp == idx as u8 {
+                //                 Span::styled(
+                //                     byte_text,
+                //                     Style::default().bg(Color::Yellow).fg(Color::White),
+                //                 )
+                //             } else {
+                //                 Span::from(byte_text)
+                //             }
+                //         })
+                //         .collect::<Vec<Span<'_>>>(),
+                // );
+
+                let stack = Paragraph::new(stack_lines).wrap(Wrap { trim: true }).block(
                     Block::default()
                         .title("stack")
                         .padding(Padding::uniform(1))
@@ -252,9 +287,9 @@ impl Tui {
                         .borders(Borders::ALL),
                 );
 
-                frame.render_widget(status, left_layout[0]);
-                frame.render_widget(trace, left_layout[1]);
-                frame.render_widget(stack, right_layout[0]);
+                frame.render_widget(trace, left_layout[0]);
+                frame.render_widget(stack, right_layout_inner[0]);
+                frame.render_widget(status, right_layout_inner[1]);
                 frame.render_widget(mem, right_layout[1]);
                 frame.render_widget(command, outer_layout[1]);
             })?;

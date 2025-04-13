@@ -1,4 +1,9 @@
-use std::{fs, path::{PathBuf, Path}, time::SystemTime, borrow::BorrowMut};
+use std::{
+    borrow::BorrowMut,
+    fs,
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 use clap::Parser;
 use nes::{debugger::Debugger, display::Display, tui::Tui};
@@ -21,7 +26,9 @@ struct Args {
     /// Run at the maximum possible speed
     #[arg(long, short)]
     maxspeed: bool,
-
+    /// Start address (PC)
+    #[arg(long, short)]
+    start: Option<String>,
 }
 
 pub fn main() {
@@ -38,37 +45,41 @@ pub fn main() {
         // ]
         // vec![0xa9, 0x01, 0xa2, 0x00, 0x9d, 0x00, 0x02, 0xe8, 0x10, 0xfa]
         // vec![0xa2, 0x00, 0xa9, 0x01, 0x9d, 0x00, 0x02, 0xe8, 0x10, 0xfa]
-        vec![
-            0xa2, 0x00, 0xa9, 0x01, 0x9d, 0x00, 0x02, 0xa4, 0xff, 0x88, 0xd0, 0xfd, 0xe8, 0x10,
-            0xf5,
-        ]
+        // vec![
+        //     0xa2, 0x00, 0xa9, 0x01, 0x9d, 0x00, 0x02, 0xa4, 0xff, 0x88, 0xd0, 0xfd, 0xe8, 0x10,
+        //     0xf5,
+        // ]
+        vec![0xa9, 0x69, 0x48, 0xa9, 0x42, 0x48, 0xa9, 0xbb, 0x48]
     };
-
 
     let mut d = Debugger::new();
 
     // d.load(&rom, 0xC000);
     // d.load(&rom, 0xFFFF-255);
-    d.load(&rom, 0x8000);
+    // d.load(&rom, 0x8000);
     d.load(&rom, 0);
     d.reset();
-    // d.cpu.lock().pc =0x400;
+    // d.cpu.lock().pc = 0x400;
     // d.cpu.lock().pc = 0x4000;
-    
+
+    if let Some(start) = args.start {
+        let start = start.strip_prefix("0x").unwrap_or(&start);
+        d.cpu.lock().pc = u16::from_str_radix(&start, 16).unwrap_or_default();
+    }
+
     if args.maxspeed {
         d.max_speed = true;
     }
 
-
     if args.run {
         d.non_interactive_mode = true;
-        
+
         let start: SystemTime = SystemTime::now();
         let handle = d.run();
         handle.unwrap().join();
-        
+
         let end = SystemTime::now().duration_since(start).unwrap();
-        
+
         if args.verbose {
             let cpu = d.cpu.lock();
             println!("\n---");
@@ -76,7 +87,7 @@ pub fn main() {
             println!("Total instructions: \t{}", cpu.instructions);
             println!("Halted in {}.{}s.", end.as_secs(), end.subsec_millis());
         }
-    } else { 
+    } else {
         let mut tui = Tui::new(d);
         let _ = tui.show();
     }

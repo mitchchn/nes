@@ -1,10 +1,14 @@
 use std::{
+    borrow::BorrowMut,
+    cell::RefCell,
+    ops::Deref,
+    rc::Rc,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
     thread::{self, JoinHandle},
-    time::{Duration, Instant, SystemTime}, cell::RefCell, rc::Rc, borrow::BorrowMut, ops::Deref,
+    time::{Duration, Instant, SystemTime},
 };
 
 use parking_lot::Mutex;
@@ -41,7 +45,7 @@ impl Debugger {
         let stdout = Stdout::new();
         let stdin = Stdin::new();
         let display = Display::new();
-        let serial = Serial::new("/tmp/vserial0").expect("Could not open serial port");
+        let serial = Serial::new("/dev/tty.debug-console").expect("Could not open serial port");
 
         let bus = Bus {
             mem,
@@ -179,7 +183,6 @@ impl Debugger {
                     if cpu.cycles_left == 0 {
                         break 'execute;
                     }
-
                 }
 
                 // Check breakpoints
