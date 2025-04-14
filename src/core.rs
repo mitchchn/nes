@@ -1,104 +1,272 @@
-use std::{
-    ffi::{CStr, CString},
-    path::{Path, PathBuf},
-};
+// use std::{
+//     ffi::{CStr, CString},
+//     path::{Path, PathBuf},
+// };
 
-use rust_libretro::{
-    contexts::{GetAvInfoContext, InitContext, RunContext},
-    core::CoreOptions,
-    retro_core,
-    sys::{retro_game_geometry, retro_game_info, retro_system_av_info, retro_system_timing},
-    types::SystemInfo,
-};
+// use crate::{bus::Bus, cart::Cart, cpu::CPU6502, io::IO, mem::Memory, ppu::Ppu};
+// use libretro_backend::{
+//     libretro_core, AudioVideoInfo, CoreInfo, GameData, JoypadButton, LoadGameResult, PixelFormat,
+//     Region, RuntimeHandle,
+// };
 
-use crate::{bus::Bus, cart::Cart, cpu::CPU6502, mem::Memory, ppu::Ppu};
+// pub struct Core {
+//     framebuffer: [u32; 256 * 240],
+//     emulator: CPU6502<Bus>,
+//     game_data: Option<GameData>,
+// }
 
-pub struct Core {
-    pixels: Vec<u8>,
+// impl Default for Core {
+//     fn default() -> Self {
+//         Self {
+//             framebuffer: [0; 256 * 240],
+//             emulator: {
+//                 let bus = Bus {
+//                     mem: Memory::new(),
+//                     ppu: Ppu::new(),
+//                     stdout: None,
+//                     stdin: None,
+//                     serial: None,
+//                     cart: None,
+//                     rng: None,
+//                 };
+
+//                 CPU6502::new(bus)
+//             },
+//             game_data: None,
+//         }
+//     }
+// }
+// impl libretro_backend::Core for Core {
+//     fn on_load_game(&mut self, game_data: GameData) -> LoadGameResult {
+//         // let path = unsafe { CStr::from_ptr(game.path) }
+//         //     .to_string_lossy()
+//         //     .to_string();
+//         // let cart = Cart::load(&PathBuf::from(path)).unwrap();
+//         // self.emulator.mem.load_cart(cart);
+//         self.game_data = Some(game_data);
+
+//         let snake_game = vec![
+//             0x20, 0x06, 0x06, 0x20, 0x38, 0x06, 0x20, 0x0d, 0x06, 0x20, 0x2a, 0x06, 0x60, 0xa9,
+//             0x02, 0x85, 0x02, 0xa9, 0x04, 0x85, 0x03, 0xa9, 0x11, 0x85, 0x10, 0xa9, 0x10, 0x85,
+//             0x12, 0xa9, 0x0f, 0x85, 0x14, 0xa9, 0x04, 0x85, 0x11, 0x85, 0x13, 0x85, 0x15, 0x60,
+//             0xa5, 0xfe, 0x85, 0x00, 0xa5, 0xfe, 0x29, 0x03, 0x18, 0x69, 0x02, 0x85, 0x01, 0x60,
+//             0x20, 0x4d, 0x06, 0x20, 0x8d, 0x06, 0x20, 0xc3, 0x06, 0x20, 0x19, 0x07, 0x20, 0x20,
+//             0x07, 0x20, 0x2d, 0x07, 0x4c, 0x38, 0x06, 0xa5, 0xff, 0xc9, 0x77, 0xf0, 0x0d, 0xc9,
+//             0x64, 0xf0, 0x14, 0xc9, 0x73, 0xf0, 0x1b, 0xc9, 0x61, 0xf0, 0x22, 0x60, 0xa9, 0x04,
+//             0x24, 0x02, 0xd0, 0x26, 0xa9, 0x01, 0x85, 0x02, 0x60, 0xa9, 0x08, 0x24, 0x02, 0xd0,
+//             0x1b, 0xa9, 0x02, 0x85, 0x02, 0x60, 0xa9, 0x01, 0x24, 0x02, 0xd0, 0x10, 0xa9, 0x04,
+//             0x85, 0x02, 0x60, 0xa9, 0x02, 0x24, 0x02, 0xd0, 0x05, 0xa9, 0x08, 0x85, 0x02, 0x60,
+//             0x60, 0x20, 0x94, 0x06, 0x20, 0xa8, 0x06, 0x60, 0xa5, 0x00, 0xc5, 0x10, 0xd0, 0x0d,
+//             0xa5, 0x01, 0xc5, 0x11, 0xd0, 0x07, 0xe6, 0x03, 0xe6, 0x03, 0x20, 0x2a, 0x06, 0x60,
+//             0xa2, 0x02, 0xb5, 0x10, 0xc5, 0x10, 0xd0, 0x06, 0xb5, 0x11, 0xc5, 0x11, 0xf0, 0x09,
+//             0xe8, 0xe8, 0xe4, 0x03, 0xf0, 0x06, 0x4c, 0xaa, 0x06, 0x4c, 0x35, 0x07, 0x60, 0xa6,
+//             0x03, 0xca, 0x8a, 0xb5, 0x10, 0x95, 0x12, 0xca, 0x10, 0xf9, 0xa5, 0x02, 0x4a, 0xb0,
+//             0x09, 0x4a, 0xb0, 0x19, 0x4a, 0xb0, 0x1f, 0x4a, 0xb0, 0x2f, 0xa5, 0x10, 0x38, 0xe9,
+//             0x20, 0x85, 0x10, 0x90, 0x01, 0x60, 0xc6, 0x11, 0xa9, 0x01, 0xc5, 0x11, 0xf0, 0x28,
+//             0x60, 0xe6, 0x10, 0xa9, 0x1f, 0x24, 0x10, 0xf0, 0x1f, 0x60, 0xa5, 0x10, 0x18, 0x69,
+//             0x20, 0x85, 0x10, 0xb0, 0x01, 0x60, 0xe6, 0x11, 0xa9, 0x06, 0xc5, 0x11, 0xf0, 0x0c,
+//             0x60, 0xc6, 0x10, 0xa5, 0x10, 0x29, 0x1f, 0xc9, 0x1f, 0xf0, 0x01, 0x60, 0x4c, 0x35,
+//             0x07, 0xa0, 0x00, 0xa5, 0xfe, 0x91, 0x00, 0x60, 0xa6, 0x03, 0xa9, 0x00, 0x81, 0x10,
+//             0xa2, 0x00, 0xa9, 0x01, 0x81, 0x10, 0x60, 0xa2, 0x00, 0xea, 0xea, 0xca, 0xd0, 0xfb,
+//             0x60,
+//         ];
+
+//         self.emulator.mem.load_mem(&snake_game, 0x600);
+//         self.emulator.pc = 0x600;
+//         let av_info = AudioVideoInfo::new()
+//             .video(256, 240, 60.0, PixelFormat::ARGB8888)
+//             .audio(44100.0)
+//             .region(Region::NTSC);
+//         LoadGameResult::Success(av_info)
+//     }
+
+//     fn info() -> CoreInfo {
+//         CoreInfo::new("Mitch NES", env!("CARGO_PKG_VERSION")).supports_roms_with_extension("nes")
+//     }
+
+//     fn on_unload_game(&mut self) -> GameData {
+//         self.game_data.take().unwrap()
+//     }
+
+//     fn on_run(&mut self, handle: &mut RuntimeHandle) {}
+
+//     fn on_reset(&mut self) {
+//         // todo!()
+//     }
+
+//     // fn on_run(&mut self, ctx: &mut RunContext, delta_us: Option<i64>) {
+//     //     self.emulator.clock();
+
+//     //     dbg!("{}", self.emulator.pc);
+
+//     //     fn color(byte: u8) -> u8 {
+//     //         match byte {
+//     //             0 => 0x00,
+//     //             _ => 0xFF,
+//     //             // 2 | 9 => sdl2::pixels::Color::GREY,
+//     //             // 3 | 10 => sdl2::pixels::Color::RED,
+//     //             // 4 | 11 => sdl2::pixels::Color::GREEN,
+//     //             // 5 | 12 => sdl2::pixels::Color::BLUE,
+//     //             // 6 | 13 => sdl2::pixels::Color::MAGENTA,
+//     //             // 7 | 14 => sdl2::pixels::Color::YELLOW,
+//     //             // _ => sdl2::pixels::Color::CYAN,
+//     //         }
+//     //     }
+
+//     //     let mut frame_idx = 0;
+//     //     for i in 0x0200..0x600 {
+//     //         let color_idx = self.emulator.read(i as u16);
+//     //         let color = color(color_idx);
+//     //         // if frame[frame_idx] != b1 || frame[frame_idx + 1] != b2 || frame[frame_idx + 2] != b3 {
+//     //         //     frame[frame_idx] = b1;
+//     //         //     frame[frame_idx + 1] = b2;
+//     //         //     frame[frame_idx + 2] = b3;
+//     //         //     update = true;
+//     //         // }
+//     //         self.pixels[frame_idx] = 0xFF;
+//     //         frame_idx += 3;
+//     //     }
+
+//     //     let width = 256u32;
+//     //     let height = 240u32;
+
+//     //     // let color_a = 0xFF;
+//     //     // let color_b = 0x80;
+
+//     //     // for (i, chunk) in self.pixels.chunks_exact_mut(4).enumerate() {
+//     //     //     let x = (i % width as usize) as f64 / width as f64;
+//     //     //     let y = (i / width as usize) as f64 / height as f64;
+
+//     //     //     let total = (50.0f64 * x).floor() + (37.5f64 * y).floor();
+//     //     //     let even = total as usize % 2 == 0;
+
+//     //     //     let color = if even { color_a } else { color_b };
+
+//     //     //     chunk.fill(color);
+//     //     // }
+
+//     //     ctx.draw_frame(self.pixels.as_ref(), width, height, width as usize * 4);
+//     // }
+// }
+
+// libretro_core!(Core);
+
+use libretro_rs::*;
+
+use crate::{bus::Bus, cpu::CPU6502, io::IO, mem::Memory, ppu::Ppu, rng::Rng};
+
+pub const FRAMEBUFFER_WIDTH: u16 = 2;
+pub const FRAMEBUFFER_HEIGHT: u16 = 2;
+pub const FRAMEBUFFER_SIZE: usize = FRAMEBUFFER_WIDTH as usize * FRAMEBUFFER_HEIGHT as usize;
+
+struct Core {
     emulator: CPU6502<Bus>,
 }
+impl RetroCore for Core {
+    fn init(env: &RetroEnvironment) -> Self {
+        let mut emulator = CPU6502::new(Bus {
+            mem: Memory::new(),
+            ppu: Ppu::new(),
+            // stdout: None,
+            // stdin: None,
+            // serial: None,
+            cart: None,
+            rng: Some(Rng::new()),
+        });
+        let snake_game = vec![
+            0x20, 0x06, 0x06, 0x20, 0x38, 0x06, 0x20, 0x0d, 0x06, 0x20, 0x2a, 0x06, 0x60, 0xa9,
+            0x02, 0x85, 0x02, 0xa9, 0x04, 0x85, 0x03, 0xa9, 0x11, 0x85, 0x10, 0xa9, 0x10, 0x85,
+            0x12, 0xa9, 0x0f, 0x85, 0x14, 0xa9, 0x04, 0x85, 0x11, 0x85, 0x13, 0x85, 0x15, 0x60,
+            0xa5, 0xfe, 0x85, 0x00, 0xa5, 0xfe, 0x29, 0x03, 0x18, 0x69, 0x02, 0x85, 0x01, 0x60,
+            0x20, 0x4d, 0x06, 0x20, 0x8d, 0x06, 0x20, 0xc3, 0x06, 0x20, 0x19, 0x07, 0x20, 0x20,
+            0x07, 0x20, 0x2d, 0x07, 0x4c, 0x38, 0x06, 0xa5, 0xff, 0xc9, 0x77, 0xf0, 0x0d, 0xc9,
+            0x64, 0xf0, 0x14, 0xc9, 0x73, 0xf0, 0x1b, 0xc9, 0x61, 0xf0, 0x22, 0x60, 0xa9, 0x04,
+            0x24, 0x02, 0xd0, 0x26, 0xa9, 0x01, 0x85, 0x02, 0x60, 0xa9, 0x08, 0x24, 0x02, 0xd0,
+            0x1b, 0xa9, 0x02, 0x85, 0x02, 0x60, 0xa9, 0x01, 0x24, 0x02, 0xd0, 0x10, 0xa9, 0x04,
+            0x85, 0x02, 0x60, 0xa9, 0x02, 0x24, 0x02, 0xd0, 0x05, 0xa9, 0x08, 0x85, 0x02, 0x60,
+            0x60, 0x20, 0x94, 0x06, 0x20, 0xa8, 0x06, 0x60, 0xa5, 0x00, 0xc5, 0x10, 0xd0, 0x0d,
+            0xa5, 0x01, 0xc5, 0x11, 0xd0, 0x07, 0xe6, 0x03, 0xe6, 0x03, 0x20, 0x2a, 0x06, 0x60,
+            0xa2, 0x02, 0xb5, 0x10, 0xc5, 0x10, 0xd0, 0x06, 0xb5, 0x11, 0xc5, 0x11, 0xf0, 0x09,
+            0xe8, 0xe8, 0xe4, 0x03, 0xf0, 0x06, 0x4c, 0xaa, 0x06, 0x4c, 0x35, 0x07, 0x60, 0xa6,
+            0x03, 0xca, 0x8a, 0xb5, 0x10, 0x95, 0x12, 0xca, 0x10, 0xf9, 0xa5, 0x02, 0x4a, 0xb0,
+            0x09, 0x4a, 0xb0, 0x19, 0x4a, 0xb0, 0x1f, 0x4a, 0xb0, 0x2f, 0xa5, 0x10, 0x38, 0xe9,
+            0x20, 0x85, 0x10, 0x90, 0x01, 0x60, 0xc6, 0x11, 0xa9, 0x01, 0xc5, 0x11, 0xf0, 0x28,
+            0x60, 0xe6, 0x10, 0xa9, 0x1f, 0x24, 0x10, 0xf0, 0x1f, 0x60, 0xa5, 0x10, 0x18, 0x69,
+            0x20, 0x85, 0x10, 0xb0, 0x01, 0x60, 0xe6, 0x11, 0xa9, 0x06, 0xc5, 0x11, 0xf0, 0x0c,
+            0x60, 0xc6, 0x10, 0xa5, 0x10, 0x29, 0x1f, 0xc9, 0x1f, 0xf0, 0x01, 0x60, 0x4c, 0x35,
+            0x07, 0xa0, 0x00, 0xa5, 0xfe, 0x91, 0x00, 0x60, 0xa6, 0x03, 0xa9, 0x00, 0x81, 0x10,
+            0xa2, 0x00, 0xa9, 0x01, 0x81, 0x10, 0x60, 0xa2, 0x00, 0xea, 0xea, 0xca, 0xd0, 0xfb,
+            0x60,
+        ];
 
-impl CoreOptions for Core {}
-impl rust_libretro::core::Core for Core {
-    fn get_info(&self) -> SystemInfo {
-        SystemInfo {
-            library_name: CString::new("Mitch NES").unwrap(),
-            library_version: CString::new("1.0.0").unwrap(),
-            valid_extensions: CString::new("").unwrap(),
-            need_fullpath: false,
-            block_extract: false,
-        }
-    }
-    fn on_get_av_info(&mut self, _ctx: &mut GetAvInfoContext) -> retro_system_av_info {
-        retro_system_av_info {
-            geometry: retro_game_geometry {
-                base_width: 256,
-                base_height: 240,
-                max_width: 256,
-                max_height: 240,
-                aspect_ratio: 1.28,
-            },
-            timing: retro_system_timing {
-                fps: 60.0,
-                sample_rate: 0.0,
-            },
-        }
-    }
-    fn on_init(&mut self, ctx: &mut InitContext) {}
-
-    fn on_load_game(
-        &mut self,
-        game: Option<retro_game_info>,
-        ctx: &mut rust_libretro::contexts::LoadGameContext,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(game) = game {
-            let path = unsafe { CStr::from_ptr(game.path) }
-                .to_string_lossy()
-                .to_string();
-            let cart = Cart::load(&PathBuf::from(path)).unwrap();
-            self.emulator.mem.load_cart(cart);
-            Ok(())
-        } else {
-            Ok(())
-        }
+        emulator.mem.load_mem(&snake_game, 0x600);
+        emulator.pc = 0x600;
+        Self { emulator }
     }
 
-    fn on_run(&mut self, ctx: &mut RunContext, delta_us: Option<i64>) {
-        let width = 256u32;
-        let height = 240u32;
+    fn get_system_info() -> RetroSystemInfo {
+        RetroSystemInfo::new("Mitch NES", "1.0")
+    }
 
-        let color_a = 0xFF;
-        let color_b = 0x80;
+    fn reset(&mut self, env: &RetroEnvironment) {}
 
-        for (i, chunk) in self.pixels.chunks_exact_mut(4).enumerate() {
-            let x = (i % width as usize) as f64 / width as f64;
-            let y = (i / width as usize) as f64 / height as f64;
-
-            let total = (50.0f64 * x).floor() + (37.5f64 * y).floor();
-            let even = total as usize % 2 == 0;
-
-            let color = if even { color_a } else { color_b };
-
-            chunk.fill(color);
+    fn run(&mut self, env: &RetroEnvironment, runtime: &RetroRuntime) {
+        for i in 1..200 {
+            self.emulator.clock();
         }
 
-        ctx.draw_frame(self.pixels.as_ref(), width, height, width as usize * 4);
+        let framebuffer = &self.emulator.mem.mem.0[0x200..0x600];
+
+        let mut frame = [0; 32 * 32 * 2];
+        let mut frame_idx = 0;
+        for (idx, value) in framebuffer.iter().enumerate() {
+            if frame_idx > frame.len() + 2 {
+                break;
+            }
+            if *value != 0 {
+                frame[frame_idx] = 255;
+                frame[frame_idx + 1] = 255;
+            } else {
+                frame[frame_idx + 0] = 0;
+                frame[frame_idx + 1] = 0;
+            }
+            frame_idx += 2;
+        }
+
+        if runtime.is_joypad_button_pressed(0, RetroJoypadButton::Up) {
+            self.emulator.mem.write(0xff, 0x77);
+        }
+
+        if runtime.is_joypad_button_pressed(0, RetroJoypadButton::Down) {
+            self.emulator.mem.write(0xff, 0x73);
+        }
+        if runtime.is_joypad_button_pressed(0, RetroJoypadButton::Left) {
+            self.emulator.mem.write(0xff, 0x61);
+        }
+        if runtime.is_joypad_button_pressed(0, RetroJoypadButton::Right) {
+            self.emulator.mem.write(0xff, 0x64);
+        }
+
+        // frame[0] = 255;
+        // frame[1] = 255;
+
+        // frame[4] = 255;
+        // frame[5] = 255;
+
+        // frame[8] = 255;
+        // frame[9] = 255;
+
+        runtime.upload_video_frame(&frame, 32, 32, 32 * 2);
+    }
+
+    fn load_game(&mut self, env: &RetroEnvironment, game: RetroGame) -> RetroLoadGameResult {
+        RetroLoadGameResult::Success {
+            audio: RetroAudioInfo::new(24000.0),
+            video: RetroVideoInfo::new(60.0, 128, 128)
+                .with_pixel_format(RetroPixelFormat::RGB565)
+                .with_aspect_ratio(1.0),
+        }
     }
 }
 
-retro_core!(Core {
-    pixels: vec![0; 256 * 240 * 4],
-    emulator: {
-        let bus = Bus {
-            mem: Memory::new(),
-            ppu: Ppu::new(),
-            stdout: None,
-            stdin: None,
-            serial: None,
-            cart: None,
-            rng: None,
-        };
-
-        CPU6502::new(bus)
-    }
-});
+libretro_core!(Core);

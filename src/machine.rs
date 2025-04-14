@@ -17,14 +17,10 @@ use crate::{
     bus::Bus,
     cart::Cart,
     cpu::{Mode, CPU6502, INSTRUCTIONS},
-    display::Display,
     io::IO,
     mem::Memory,
     ppu::Ppu,
     rng::Rng,
-    serial::Serial,
-    stdin::Stdin,
-    stdout::Stdout,
 };
 
 pub enum CpuMessage {
@@ -45,19 +41,16 @@ pub struct Machine {
 impl Machine {
     pub fn new() -> Self {
         let mem: Memory = Memory::new();
-        let stdout = Some(Stdout::new());
-        let stdin = Some(Stdin::new());
-        let serial =
-            Some(Serial::new("/dev/tty.debug-console").expect("Could not open serial port"));
+        // let stdout = Some(Stdout::new());
+        // let stdin = Some(Stdin::new());
+        // let serial =
+        // Some(Serial::new("/dev/tty.debug-console").expect("Could not open serial port"));
         let cart = None;
         let rng = Some(Rng::new());
         let ppu = Ppu::new();
 
         let bus = Bus {
             mem,
-            stdout,
-            stdin,
-            serial,
             cart,
             ppu,
             rng,

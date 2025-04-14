@@ -1,9 +1,11 @@
-use colored::{ColoredString, Colorize};
 use crate::io::IO;
+use bitflags::bitflags;
+use colored::{ColoredString, Colorize};
 
 const DEBUG: bool = false;
 
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     /// Processor status register
     pub struct Status: u8 {
         /// Negative

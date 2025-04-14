@@ -6,7 +6,7 @@ use std::{
 };
 
 use clap::Parser;
-use nes::{display::Display, machine::Machine, tui::Tui};
+use nes::{machine::Machine, tui::Tui};
 
 /// 6502 CPU Emulator and Debugger
 #[derive(Parser, Debug)]

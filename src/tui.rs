@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, io::stdout, sync::Arc};
+use std::{io::stdout, sync::Arc};
 
 use crossterm::{
     event::{self, Event, KeyCode},
@@ -8,7 +8,7 @@ use crossterm::{
 use parking_lot::Mutex;
 use ratatui::{prelude::*, widgets::*, Terminal};
 
-use crate::{cpu::Status, display::Display, machine::Machine};
+use crate::{cpu::Status, machine::Machine};
 
 pub struct Tui {
     machine: Arc<Mutex<Machine>>,
@@ -329,9 +329,13 @@ impl Tui {
         let d = self.machine.clone();
         let c = d.lock().cpu.clone();
 
-        let mut display = Display::new(c);
-        display.show();
-        t.join();
+        #[cfg(feature = "sdl")]
+        {
+            use crate::display::Display;
+            let mut display = Display::new(c);
+            display.show();
+            t.join();
+        }
 
         disable_raw_mode()?;
         stdout().execute(LeaveAlternateScreen)?;

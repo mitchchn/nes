@@ -31,21 +31,27 @@ rpath = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+
+[features]
+default = ["sdl", "libretro"]
+sdl = ["dep:sdl2"]
+libretro = ["dep:libretro-rs"]
+
 [dependencies]
-bitflags = "1.0"
-colored = "2.0"
-rustasm6502 = "0.1.2"
-ratatui = "0.24.0"
-crossterm = "0.27.0"
-sdl2 = "0.37.0"
+bitflags = "2.9.0"
+rand = "0.9.0"
 clap = { version = "4.5.36", features = ["derive"] }
+colored = "3.0"
+ratatui = "0.29.0"
+crossterm = "0.29.0"
 parking_lot = "0.12.1"
 parking_lot_core = "0.9.9"
-serialport = "4.2.2"
-raw_tty = "0.1.0"
-rust-libretro = "0.3.2"
-rand = "0.9.0"
+sdl2 = { version = "0.37.0", optional = true }
+# serialport = "4.2.2"
+libretro-rs = { version = "0.1.3", optional = true }
 
-# [target.'cfg(target_os="macos")'.dependencies.sdl2]
-# features = ["bundled"]
-# version = "0.37.0"
+[workspace.metadata.cross.target.aarch64-unknown-linux-gnu]
+pre-build = [
+    "dpkg --add-architecture $CROSS_DEB_ARCH",
+    "apt-get update && apt-get --assume-yes install libsdl2-dev:$CROSS_DEB_ARCH",
+]

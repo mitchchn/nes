@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::{
-    cart::Cart, io::IO, mem::Memory, ppu::Ppu, rng::Rng, serial::Serial, stdin::Stdin,
-    stdout::Stdout,
-};
+use crate::{cart::Cart, io::IO, mem::Memory, ppu::Ppu, rng::Rng};
 
 const RAM_START: u16 = 0x0000;
 const RAM_END: u16 = 0x4FFF;
@@ -35,9 +32,9 @@ const ROM_END: u16 = 0xFFFF;
 pub struct Bus {
     pub mem: Memory,
     pub ppu: Ppu,
-    pub stdout: Option<Stdout>,
-    pub stdin: Option<Stdin>,
-    pub serial: Option<Serial>,
+    // pub stdout: Option<Stdout>,
+    // pub stdin: Option<Stdin>,
+    // pub serial: Option<Serial>,
     pub rng: Option<Rng>,
     pub cart: Option<Arc<Mutex<Cart>>>,
 }
@@ -48,6 +45,10 @@ impl Bus {
 
         self.cart = Some(cart.clone());
         self.ppu.cart = Some(cart.clone());
+    }
+
+    pub fn load_mem(&mut self, data: &[u8], offset: u16) {
+        self.mem.load(data, offset);
     }
 }
 
