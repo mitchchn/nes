@@ -1,12 +1,12 @@
 use std::{io::stdout, sync::Arc};
 
 use crossterm::{
-    event::{self, Event, KeyCode},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
+    event::{self, Event, KeyCode},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use parking_lot::Mutex;
-use ratatui::{prelude::*, widgets::*, Terminal};
+use ratatui::{Terminal, prelude::*, widgets::*};
 
 use crate::{cpu::Status, machine::Machine};
 
@@ -84,11 +84,13 @@ impl Tui {
                             "PC    A  X  Y    SP",
                             Style::default().fg(Color::Magenta).bold(),
                         );
-                        let status_line = Line::from(vec![format!(
-                            "{:04X}  {:02X} {:02X} {:02X}   {:02X}    ",
-                            cpu.pc, cpu.a, cpu.x, cpu.y, cpu.sp
-                        )
-                        .into()]);
+                        let status_line = Line::from(vec![
+                            format!(
+                                "{:04X}  {:02X} {:02X} {:02X}   {:02X}    ",
+                                cpu.pc, cpu.a, cpu.x, cpu.y, cpu.sp
+                            )
+                            .into(),
+                        ]);
 
                         let flag_line = Line::from(vec![
                             color_flag(f[0], "N"),

@@ -722,7 +722,7 @@ impl<T: IO> CPU6502<T> {
 
     pub fn decode_instruction(&mut self) -> String {
         if let Some(instruction) = self.instruction {
-            let formatted_operand = match instruction.1 .1 {
+            let formatted_operand = match instruction.1.1 {
                 Mode::IMP => "".to_string(),
                 Mode::IMM => format!("#${:02X}", self.read(self.op_addr)),
                 Mode::ACC => "A".to_string(),

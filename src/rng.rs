@@ -1,5 +1,5 @@
 use crate::io::IO;
-use rand::{prelude::*, Rng as RandRng};
+use rand::{Rng as RandRng, prelude::*};
 
 pub struct Rng {}
 

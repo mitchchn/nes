@@ -4,8 +4,8 @@ use std::{
     ops::Deref,
     rc::Rc,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime},
@@ -16,7 +16,7 @@ use parking_lot::Mutex;
 use crate::{
     bus::Bus,
     cart::Cart,
-    cpu::{Mode, CPU6502, INSTRUCTIONS},
+    cpu::{CPU6502, INSTRUCTIONS, Mode},
     io::IO,
     mem::Memory,
     ppu::Ppu,

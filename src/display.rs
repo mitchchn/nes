@@ -1,12 +1,12 @@
 use parking_lot::Mutex;
 use sdl2::{
+    EventPump,
     event::Event,
     keyboard::Keycode,
     pixels::PixelFormatEnum,
     rect::Rect,
     render::{Canvas, Texture},
     video::Window,
-    EventPump,
 };
 
 use crate::{bus::Bus, cpu::CPU6502, io::IO};
