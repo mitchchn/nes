@@ -17,7 +17,7 @@ opt-level = 1
 [profile.release]
 opt-level = 3
 debug = false
-split-debuginfo = '...'  # Platform-specific.
+# split-debuginfo = '...'  # Platform-specific.
 debug-assertions = false
 overflow-checks = false
 lto = "fat"
@@ -26,8 +26,8 @@ incremental = false
 codegen-units = 1
 rpath = false
 
-[build]
-rustflags = ["-C", "target-cpu=native"]
+# [build]
+# rustflags = ["-C", "target-cpu=native"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -37,9 +37,15 @@ colored = "2.0"
 rustasm6502 = "0.1.2"
 ratatui = "0.24.0"
 crossterm = "0.27.0"
-sdl2 = "0.35.2"
+sdl2 = "0.37.0"
 clap = { version = "4.5.36", features = ["derive"] }
 parking_lot = "0.12.1"
 parking_lot_core = "0.9.9"
 serialport = "4.2.2"
 raw_tty = "0.1.0"
+rust-libretro = "0.3.2"
+rand = "0.9.0"
+
+# [target.'cfg(target_os="macos")'.dependencies.sdl2]
+# features = ["bundled"]
+# version = "0.37.0"

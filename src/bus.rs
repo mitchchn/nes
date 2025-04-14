@@ -1,6 +1,11 @@
-use std::{rc::Rc, cell::RefCell};
+use std::sync::Arc;
 
-use crate::{serial::Serial, stdin::Stdin, stdout::Stdout, mem::Memory, display::Display, io::IO, cpu::CPU6502};
+use parking_lot::Mutex;
+
+use crate::{
+    cart::Cart, io::IO, mem::Memory, ppu::Ppu, rng::Rng, serial::Serial, stdin::Stdin,
+    stdout::Stdout,
+};
 
 const RAM_START: u16 = 0x0000;
 const RAM_END: u16 = 0x4FFF;
@@ -8,7 +13,7 @@ const SERIAL_START: u16 = 0x5000;
 const SERIAL_END: u16 = 0x5FFF;
 // const SERIAL_START: u16 = 0x8400;
 // const SERIAL_END: u16 = 0x8403;
-const ROM_START: u16 = 0xC000;
+const ROM_START: u16 = 0x4000;
 const ROM_END: u16 = 0xFFFF;
 
 // pub struct CpuBus {
@@ -29,35 +34,48 @@ const ROM_END: u16 = 0xFFFF;
 
 pub struct Bus {
     pub mem: Memory,
-    pub stdout: Stdout,
-    pub stdin: Stdin,
-    pub display: Display,
-    pub serial: Serial,
+    pub ppu: Ppu,
+    pub stdout: Option<Stdout>,
+    pub stdin: Option<Stdin>,
+    pub serial: Option<Serial>,
+    pub rng: Option<Rng>,
+    pub cart: Option<Arc<Mutex<Cart>>>,
 }
 
 impl Bus {
+    pub fn load_cart(&mut self, cart: Cart) {
+        let cart = Arc::new(Mutex::new(cart));
 
+        self.cart = Some(cart.clone());
+        self.ppu.cart = Some(cart.clone());
+    }
 }
 
 impl IO for Bus {
     fn read(&mut self, addr: u16) -> u8 {
         match addr {
-            SERIAL_START..=SERIAL_END => {
-                self.serial.read(addr-SERIAL_START)
+            0xFE => {
+                if let Some(rng) = &mut self.rng {
+                    rng.read(addr)
+                } else {
+                    0
+                }
             }
-            _ => {
-                self.mem.read(addr)
+            // SERIAL_START..=SERIAL_END => self.serial.read(addr - SERIAL_START),
+            ROM_START..=ROM_END => {
+                if let Some(ref cart) = self.cart {
+                    cart.lock().read(addr)
+                } else {
+                    self.mem.read(addr)
+                }
             }
+            _ => self.mem.read(addr),
         }
     }
     fn write(&mut self, addr: u16, data: u8) {
         match addr {
-            SERIAL_START..=SERIAL_END => {
-                self.serial.write(addr-SERIAL_START, data)
-            }
-            _ => {
-                self.mem.write(addr, data)
-            }
+            // SERIAL_START..=SERIAL_END => self.serial.write(addr - SERIAL_START, data),
+            _ => self.mem.write(addr, data),
         }
     }
 }

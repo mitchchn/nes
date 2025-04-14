@@ -1,19 +1,23 @@
+pub mod bus;
+pub mod cart;
+pub mod core;
 pub mod cpu;
 pub mod display;
-pub mod tui;
 pub mod io;
-pub mod debugger;
+pub mod machine;
 pub mod mem;
-pub mod stdout;
-pub mod stdin;
+pub mod ppu;
+pub mod rng;
 pub mod serial;
-pub mod bus;
+pub mod stdin;
+pub mod stdout;
+pub mod tui;
 
 #[macro_use]
 extern crate bitflags;
 
-#[no_link]
-extern crate rustasm6502;
+// #[no_link]
+// extern crate rustasm6502;
 
 // use crate::machine::Machine;
 

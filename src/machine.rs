@@ -15,10 +15,13 @@ use parking_lot::Mutex;
 
 use crate::{
     bus::Bus,
+    cart::Cart,
     cpu::{Mode, CPU6502, INSTRUCTIONS},
     display::Display,
     io::IO,
     mem::Memory,
+    ppu::Ppu,
+    rng::Rng,
     serial::Serial,
     stdin::Stdin,
     stdout::Stdout,
@@ -30,7 +33,7 @@ pub enum CpuMessage {
 
 static HALT: AtomicBool = AtomicBool::new(true);
 
-pub struct Debugger {
+pub struct Machine {
     pub cpu: Arc<Mutex<CPU6502<Bus>>>,
     pub instruction_log: Vec<(u16, String)>,
     pub breakpoints: Vec<u16>,
@@ -39,29 +42,35 @@ pub struct Debugger {
     pub max_speed: bool,
 }
 
-impl Debugger {
+impl Machine {
     pub fn new() -> Self {
-        let mem = Memory::new();
-        let stdout = Stdout::new();
-        let stdin = Stdin::new();
-        let display = Display::new();
-        let serial = Serial::new("/dev/tty.debug-console").expect("Could not open serial port");
+        let mem: Memory = Memory::new();
+        let stdout = Some(Stdout::new());
+        let stdin = Some(Stdin::new());
+        let serial =
+            Some(Serial::new("/dev/tty.debug-console").expect("Could not open serial port"));
+        let cart = None;
+        let rng = Some(Rng::new());
+        let ppu = Ppu::new();
 
         let bus = Bus {
             mem,
             stdout,
             stdin,
-            display,
             serial,
+            cart,
+            ppu,
+            rng,
         };
 
         let cpu = Arc::new(Mutex::new(CPU6502::new(bus)));
 
-        let m = Debugger {
+        let m = Machine {
             cpu,
             instruction_log: vec![],
             breakpoints: vec![],
-            clock_speed: Some(2_000_000),
+            // clock_speed: Some(2_000_000),
+            clock_speed: Some(20_000),
             non_interactive_mode: false,
             max_speed: false,
         };
@@ -108,6 +117,15 @@ impl Debugger {
 
     pub fn load(&mut self, data: &[u8], offset: u16) {
         self.cpu.lock().mem.mem.load(data, offset);
+        self.instruction_log = self.disassemble();
+    }
+
+    pub fn load_cart(&mut self, data: &[u8]) {
+        self.cpu
+            .lock()
+            .mem
+            .load_cart(Cart::new(data).expect("Could not load cartridge"));
+
         self.instruction_log = self.disassemble();
     }
 
@@ -163,7 +181,6 @@ impl Debugger {
         let cycles_per_interval = clock_speed / target_fps;
         let ns_per_interval: u64 = 1_000_000_000 / target_fps;
         let max_speed = self.max_speed;
-
         let cpu = self.cpu.clone();
         let cpu_thread = thread::spawn(move || {
             let mut cycles_since_last_interval = 0;
@@ -208,7 +225,7 @@ impl Debugger {
     }
 }
 
-impl IO for Debugger {
+impl IO for Machine {
     fn read(&mut self, addr: u16) -> u8 {
         self.cpu.lock().mem.read(addr)
     }
