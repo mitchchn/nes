@@ -1,7 +1,7 @@
 use std::{
     borrow::BorrowMut,
     cell::RefCell,
-    ops::Deref,
+    ops::{Deref, Mul},
     rc::Rc,
     sync::{
         Arc,
@@ -25,6 +25,68 @@ use crate::{
 
 pub enum CpuMessage {
     Pause,
+}
+
+#[derive(Debug)]
+pub struct FrameTimer {
+    pub start_time: Instant,
+    pub current_cycles: u64,
+
+    pub cycles_per_frame: u64,
+    pub frame_time: Duration,
+
+    pub last_context_switch_error: Duration,
+}
+
+impl FrameTimer {
+    pub fn new(target_fps: u64, clock_speed: u64) -> Self {
+        // 33,3333 cycles for 60 FPS @ 2MHZ
+        let cycles_per_frame = (clock_speed / target_fps);
+        // 16.666 ms (16,666 us) per frame at 60 FPS
+        let ns_per_frame = 1_000_000_000 / target_fps;
+        Self {
+            start_time: Instant::now(),
+            current_cycles: 0,
+            cycles_per_frame,
+            frame_time: Duration::from_nanos(ns_per_frame),
+            last_context_switch_error: Duration::from_nanos(0),
+        }
+    }
+    pub fn computed(&self) -> bool {
+        self.current_cycles >= self.cycles_per_frame
+    }
+
+    pub fn time_remaining(&self) -> Duration {
+        let time_elapsed_in_frame = self.start_time.elapsed();
+        if time_elapsed_in_frame >= self.frame_time {
+            println!("Frame took longer than 16ms!");
+            Duration::from_millis(0)
+        } else {
+            self.frame_time - time_elapsed_in_frame
+        }
+    }
+
+    pub fn sleep(&mut self) {
+        let time_remaining = self.time_remaining();
+        if time_remaining <= self.last_context_switch_error {
+            return;
+        }
+
+        let corrected_frame_time_delay = time_remaining - self.last_context_switch_error;
+        // dbg!(&delay);
+        let sleep_start_time = Instant::now();
+        std::thread::sleep(corrected_frame_time_delay);
+        self.last_context_switch_error = sleep_start_time.elapsed() - corrected_frame_time_delay;
+    }
+
+    pub fn clock(&mut self) {
+        self.current_cycles += 1;
+    }
+
+    pub fn reset(&mut self) {
+        self.current_cycles = 0;
+        self.start_time = Instant::now();
+    }
 }
 
 static HALT: AtomicBool = AtomicBool::new(true);
@@ -62,11 +124,12 @@ impl Machine {
             cpu,
             instruction_log: vec![],
             breakpoints: vec![],
-            // clock_speed: Some(2_000_000),
-            clock_speed: Some(20_000),
+            clock_speed: Some(2_000_000),
+            // clock_speed: Some(20_000),
             non_interactive_mode: false,
             max_speed: false,
         };
+
         m
     }
 
@@ -170,15 +233,10 @@ impl Machine {
         let breakpoints = self.breakpoints.clone();
         let clock_speed: u64 = self.clock_speed.unwrap_or(1_000_000);
 
-        let target_fps = 60;
-        let cycles_per_interval = clock_speed / target_fps;
-        let ns_per_interval: u64 = 1_000_000_000 / target_fps;
         let max_speed = self.max_speed;
         let cpu = self.cpu.clone();
         let cpu_thread = thread::spawn(move || {
-            let mut cycles_since_last_interval = 0;
-            let mut time_to_next_interval = Instant::now() + Duration::from_nanos(ns_per_interval);
-
+            let mut frame_timer = FrameTimer::new(60, clock_speed);
             // Run loop
             'running: loop {
                 let mut cpu = cpu.lock();
@@ -189,11 +247,17 @@ impl Machine {
                 // Execute current instruction
                 'execute: loop {
                     cpu.clock();
-                    cycles_since_last_interval += 1;
+                    frame_timer.clock();
                     if cpu.cycles_left == 0 {
                         break 'execute;
                     }
                 }
+
+                // if &frame_timer.current_cycles > &(532 as u64) {
+                // dbg!(&frame_timer);
+                // dbg!(&frame_timer.time_remaining());
+                // HALT.store(true, Ordering::Relaxed);
+                // }
 
                 // Check breakpoints
                 if breakpoints.contains(&cpu.pc) {
@@ -203,14 +267,9 @@ impl Machine {
                 // Instructions are executed as fast as the host is capable of running them.
                 // To simulate the speed of the original hardware, we wait out the remaining length of time in the frame (interval)
                 // before executing the next instruction. The interval length was calculated based on the desired clockspeed.
-                if !max_speed && cycles_since_last_interval > cycles_per_interval {
-                    let time_left_in_interval = time_to_next_interval - Instant::now();
-                    if time_left_in_interval.as_nanos() > 0 {
-                        thread::sleep(time_left_in_interval);
-                    }
-
-                    cycles_since_last_interval = 0;
-                    time_to_next_interval = Instant::now() + Duration::from_nanos(ns_per_interval);
+                if !max_speed && frame_timer.computed() {
+                    frame_timer.sleep();
+                    frame_timer.reset();
                 }
             }
         });

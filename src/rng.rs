@@ -1,11 +1,13 @@
 use crate::io::IO;
 use rand::{Rng as RandRng, prelude::*};
 
-pub struct Rng {}
+pub struct Rng {
+    value: u8,
+}
 
 impl Rng {
     pub fn new() -> Self {
-        Self {}
+        Self { value: 0 }
     }
 }
 

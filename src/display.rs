@@ -25,7 +25,7 @@ use std::{
 /// Responds to addresses $0200 - $05ff.
 pub struct Display {
     // buffer: Arc<Mutex<[u8; 32 * 32]>>,
-    buffer: Arc<Mutex<dyn IO>>,
+    buffer: Arc<Mutex<CPU6502<Bus>>>,
 }
 
 impl Display {
@@ -64,8 +64,7 @@ impl Display {
         let mut screen_state = [0 as u8; 32 * 3 * 32];
 
         'running: loop {
-            let mut cpu = self.buffer.lock();
-
+            let mut next_key = 0;
             for event in event_pump.poll_iter() {
                 match event {
                     Event::Quit { .. }
@@ -77,28 +76,28 @@ impl Display {
                         keycode: Some(Keycode::Up),
                         ..
                     } => {
-                        cpu.write(0xff, 0x77);
+                        next_key = 0x77;
                     }
                     Event::KeyDown {
                         keycode: Some(Keycode::Down),
                         ..
                     } => {
-                        cpu.write(0xff, 0x73);
+                        next_key = 0x73;
                     }
                     Event::KeyDown {
                         keycode: Some(Keycode::Left),
                         ..
                     } => {
-                        cpu.write(0xff, 0x61);
+                        next_key = 0x61;
                     }
                     Event::KeyDown {
                         keycode: Some(Keycode::Right),
                         ..
                     } => {
-                        cpu.write(0xff, 0x64);
+                        next_key = 0x64;
                     }
                     _ => { /* do nothing */ }
-                }
+                };
 
                 // match event {
                 //     Event::Quit { .. }
@@ -110,8 +109,15 @@ impl Display {
                 // }
             }
 
+            let mut cpu = self.buffer.lock();
+            let screen = cpu.mem.mem.0[0x200..0x600].to_vec();
+            if next_key != 0 {
+                cpu.write(0xff, next_key);
+            }
+            drop(cpu);
+
             fn color(byte: u8) -> Color {
-                match byte {
+                match byte % 16 {
                     0 => sdl2::pixels::Color::BLACK,
                     1 => sdl2::pixels::Color::WHITE,
                     2 | 9 => sdl2::pixels::Color::GREY,
@@ -125,13 +131,14 @@ impl Display {
             }
 
             fn read_screen_state(
-                cpu: &mut impl DerefMut<Target = dyn IO>,
+                // cpu: &mut impl DerefMut<Target = dyn IO>,
+                screen: &[u8],
                 frame: &mut [u8; 32 * 3 * 32],
             ) -> bool {
                 let mut frame_idx = 0;
                 let mut update = false;
-                for i in 0x0200..0x600 {
-                    let color_idx = cpu.read(i as u16);
+                for i in 0x0..0x400 {
+                    let color_idx = screen[i];
                     let (b1, b2, b3) = color(color_idx).rgb();
                     if frame[frame_idx] != b1
                         || frame[frame_idx + 1] != b2
@@ -147,7 +154,7 @@ impl Display {
                 update
             }
 
-            if read_screen_state(&mut cpu, &mut screen_state) {
+            if read_screen_state(&screen, &mut screen_state) {
                 texture.update(None, &screen_state, 32 * 3).unwrap();
                 canvas.copy(&texture, None, None).unwrap();
                 canvas.present();

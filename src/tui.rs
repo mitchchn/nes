@@ -1,4 +1,4 @@
-use std::{io::stdout, sync::Arc};
+use std::{io::stdout, sync::Arc, thread::JoinHandle};
 
 use crossterm::{
     ExecutableCommand,
@@ -21,7 +21,7 @@ impl Tui {
         }
     }
 
-    pub fn show(&mut self) -> std::io::Result<()> {
+    pub fn show(&mut self) -> std::io::Result<JoinHandle<()>> {
         let d = self.machine.clone();
 
         enable_raw_mode()?;
@@ -32,6 +32,16 @@ impl Tui {
             loop {
                 let mut d = d.lock();
                 let cpu = d.cpu.lock();
+                let mem = cpu.mem.mem.0.to_vec();
+                let flags = cpu.p.clone();
+                let pc = cpu.pc;
+                let a = cpu.a;
+                let x = cpu.x;
+                let y = cpu.y;
+                let sp = cpu.sp;
+                let cycles = cpu.cycles;
+                drop(cpu);
+
                 // d.flush(&    self.mem.lock().unwrap().0[0x200..=0x5FF]);
 
                 terminal
@@ -70,14 +80,14 @@ impl Tui {
                         };
 
                         let f: [u8; 8] = [
-                            if cpu.p.contains(Status::N) { 1 } else { 0 },
-                            if cpu.p.contains(Status::V) { 1 } else { 0 },
-                            if cpu.p.contains(Status::U) { 1 } else { 0 },
-                            if cpu.p.contains(Status::B) { 1 } else { 0 },
-                            if cpu.p.contains(Status::D) { 1 } else { 0 },
-                            if cpu.p.contains(Status::I) { 1 } else { 0 },
-                            if cpu.p.contains(Status::Z) { 1 } else { 0 },
-                            if cpu.p.contains(Status::C) { 1 } else { 0 },
+                            if flags.contains(Status::N) { 1 } else { 0 },
+                            if flags.contains(Status::V) { 1 } else { 0 },
+                            if flags.contains(Status::U) { 1 } else { 0 },
+                            if flags.contains(Status::B) { 1 } else { 0 },
+                            if flags.contains(Status::D) { 1 } else { 0 },
+                            if flags.contains(Status::I) { 1 } else { 0 },
+                            if flags.contains(Status::Z) { 1 } else { 0 },
+                            if flags.contains(Status::C) { 1 } else { 0 },
                         ];
 
                         let status_header = Line::styled(
@@ -85,11 +95,8 @@ impl Tui {
                             Style::default().fg(Color::Magenta).bold(),
                         );
                         let status_line = Line::from(vec![
-                            format!(
-                                "{:04X}  {:02X} {:02X} {:02X}   {:02X}    ",
-                                cpu.pc, cpu.a, cpu.x, cpu.y, cpu.sp
-                            )
-                            .into(),
+                            format!("{:04X}  {:02X} {:02X} {:02X}   {:02X}    ", pc, a, x, y, sp)
+                                .into(),
                         ]);
 
                         let flag_line = Line::from(vec![
@@ -128,7 +135,7 @@ impl Tui {
 
                         let cycles_line = Line::from(vec![
                             "Cycles: ".fg(Color::Gray),
-                            format!("{}", cpu.cycles).into(),
+                            format!("{}", cycles).into(),
                         ]);
                         let status_text = vec![
                             status_header,
@@ -159,7 +166,7 @@ impl Tui {
                                     //     Line::raw(inst)
                                     // }
 
-                                    if cpu.pc == *addr {
+                                    if pc == *addr {
                                         Line::styled(inst, Style::default().fg(Color::Green))
                                     } else {
                                         Line::raw(inst)
@@ -186,7 +193,7 @@ impl Tui {
                             let pos = d
                                 .instruction_log
                                 .iter()
-                                .position(|(addr, _)| cpu.pc == *addr)
+                                .position(|(addr, _)| pc == *addr)
                                 .unwrap_or_default();
 
                             if pos > (trace_lines / 2) {
@@ -208,12 +215,12 @@ impl Tui {
                         let mut stack_lines = vec![];
 
                         // Stack (ascending order so reverse from actual memory layout)
-                        for (idx, byte) in cpu.mem.mem.0[0x100..=0x1FF].iter().rev().enumerate() {
+                        for (idx, byte) in mem[0x100..=0x1FF].iter().rev().enumerate() {
                             let addr = 0xff - idx;
                             let byte_text = format!("{:02X}", byte);
                             stack_lines.push(Line::from(vec![
                                 format!("{:02X}: ", addr).dark_gray(),
-                                if cpu.sp == addr as u8 {
+                                if sp == addr as u8 {
                                     Span::styled(
                                         byte_text,
                                         Style::default().bg(Color::Yellow).fg(Color::White),
@@ -252,10 +259,7 @@ impl Tui {
 
                         // Display memory as rows of 8 bytes indexed by address
                         let mem_text = Text::from(
-                            cpu.mem
-                                .mem
-                                .0
-                                .chunks(8)
+                            mem.chunks(8)
                                 .into_iter()
                                 .enumerate()
                                 .map(|(idx, chunk)| {
@@ -300,7 +304,6 @@ impl Tui {
                     })
                     .unwrap();
 
-                drop(cpu);
                 if event::poll(std::time::Duration::from_millis(50)).unwrap() {
                     if let Event::Key(key) = event::read().unwrap() {
                         if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('q')
@@ -328,19 +331,13 @@ impl Tui {
             }
         });
 
-        let d = self.machine.clone();
-        let c = d.lock().cpu.clone();
+        Ok(t)
+    }
 
-        #[cfg(feature = "sdl")]
-        {
-            use crate::display::Display;
-            let mut display = Display::new(c);
-            display.show();
-            t.join();
-        }
-
+    pub fn hide(&mut self) -> std::io::Result<()> {
         disable_raw_mode()?;
-        stdout().execute(LeaveAlternateScreen)?;
+        stdout().execute(LeaveAlternateScreen);
+
         Ok(())
     }
 }

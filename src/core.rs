@@ -151,6 +151,7 @@
 
 // libretro_core!(Core);
 
+use colored::Color;
 use libretro_rs::*;
 
 use crate::{bus::Bus, cpu::CPU6502, io::IO, mem::Memory, ppu::Ppu, rng::Rng};
@@ -211,21 +212,49 @@ impl RetroCore for Core {
     fn reset(&mut self, env: &RetroEnvironment) {}
 
     fn run(&mut self, env: &RetroEnvironment, runtime: &RetroRuntime) {
-        for i in 1..200 {
+        for i in 1..50 {
             self.emulator.clock();
+        }
+        while self.emulator.cycles_left > 0 {
+            self.emulator.clock();
+        }
+
+        fn color(byte: u8) -> u16 {
+            match byte {
+                //Black
+                0 => 0x0000,
+                // White
+                1 => 0xFFFF,
+                // Gray
+                2 | 9 => 0xad55,
+                // Red
+                3 | 10 => 0xf800,
+                // Green
+                4 | 11 => 0x07e0,
+                // Blue
+                5 | 12 => 0x001f,
+                // Magenta
+                6 | 13 => 0xf81f,
+                // Yellow
+                7 | 14 => 0xffe0,
+                // Cyan
+                _ => 0x07ff,
+            }
         }
 
         let framebuffer = &self.emulator.mem.mem.0[0x200..0x600];
 
-        let mut frame = [0; 32 * 32 * 2];
+        let mut frame: [u8; 2048] = [0; 32 * 32 * 2];
         let mut frame_idx = 0;
         for (idx, value) in framebuffer.iter().enumerate() {
             if frame_idx > frame.len() + 2 {
                 break;
             }
             if *value != 0 {
-                frame[frame_idx] = 255;
-                frame[frame_idx + 1] = 255;
+                let c = color(*value);
+
+                frame[frame_idx] = (c >> 4) as u8;
+                frame[frame_idx + 1] = c as u8;
             } else {
                 frame[frame_idx + 0] = 0;
                 frame[frame_idx + 1] = 0;
