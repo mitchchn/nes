@@ -164,7 +164,7 @@ ZeroBuf:
         STA framesPerMove
         STA moveCounter
 
-        LDA #$01
+        LDA #$0A
         STA foodColorCounter
 
         ; drop a food byte somewhere random

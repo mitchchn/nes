@@ -30,61 +30,62 @@ pub enum CpuMessage {
 #[derive(Debug)]
 pub struct FrameTimer {
     pub start_time: Instant,
-    pub current_cycles: u64,
+    pub current_cycles: f64,
 
-    pub cycles_per_frame: u64,
+    pub cycles_per_frame: f64,
     pub frame_time: Duration,
 
-    pub last_context_switch_error: Duration,
+    pub last_error: Duration,
 }
 
 impl FrameTimer {
-    pub fn new(target_fps: u64, clock_speed: u64) -> Self {
+    pub fn new(target_fps: f64, clock_speed_hz: u64) -> Self {
         // 33,3333 cycles for 60 FPS @ 2MHZ
-        let cycles_per_frame = (clock_speed / target_fps);
+        let cycles_per_frame = (clock_speed_hz as f64 / target_fps);
         // 16.666 ms (16,666 us) per frame at 60 FPS
-        let ns_per_frame = 1_000_000_000 / target_fps;
+        // let ns_per_frame = 1_000_000_000.0 / target_fps;
+        let s_per_frame = 1.0 / target_fps;
         Self {
             start_time: Instant::now(),
-            current_cycles: 0,
+            current_cycles: 0.0,
             cycles_per_frame,
-            frame_time: Duration::from_nanos(ns_per_frame),
-            last_context_switch_error: Duration::from_nanos(0),
+            frame_time: Duration::from_secs_f64(s_per_frame),
+            last_error: Duration::from_nanos(0),
         }
     }
     pub fn computed(&self) -> bool {
         self.current_cycles >= self.cycles_per_frame
     }
 
-    pub fn time_remaining(&self) -> Duration {
-        let time_elapsed_in_frame = self.start_time.elapsed();
-        if time_elapsed_in_frame >= self.frame_time {
+    pub fn frame_time_remaining(&self) -> Duration {
+        let current_frame_time = self.start_time.elapsed();
+        if current_frame_time >= self.frame_time {
             println!("Frame took longer than 16ms!");
             Duration::from_millis(0)
         } else {
-            self.frame_time - time_elapsed_in_frame
+            self.frame_time - current_frame_time
         }
     }
 
     pub fn sleep(&mut self) {
-        let time_remaining = self.time_remaining();
-        if time_remaining <= self.last_context_switch_error {
+        let time_remaining = self.frame_time_remaining();
+        if time_remaining <= self.last_error {
+            self.last_error = Duration::from_nanos(0);
             return;
         }
 
-        let corrected_frame_time_delay = time_remaining - self.last_context_switch_error;
-        // dbg!(&delay);
+        let corrected_time_remaining = time_remaining - self.last_error;
         let sleep_start_time = Instant::now();
-        std::thread::sleep(corrected_frame_time_delay);
-        self.last_context_switch_error = sleep_start_time.elapsed() - corrected_frame_time_delay;
+        std::thread::sleep(corrected_time_remaining);
+        self.last_error = sleep_start_time.elapsed() - corrected_time_remaining;
     }
 
     pub fn clock(&mut self) {
-        self.current_cycles += 1;
+        self.current_cycles += 1.0;
     }
 
-    pub fn reset(&mut self) {
-        self.current_cycles = 0;
+    pub fn start(&mut self) {
+        self.current_cycles = 0.0;
         self.start_time = Instant::now();
     }
 }
@@ -236,7 +237,7 @@ impl Machine {
         let max_speed = self.max_speed;
         let cpu = self.cpu.clone();
         let cpu_thread = thread::spawn(move || {
-            let mut frame_timer = FrameTimer::new(60, clock_speed);
+            let mut frame_timer = FrameTimer::new(60.0, clock_speed);
             // Run loop
             'running: loop {
                 let mut cpu = cpu.lock();
@@ -269,7 +270,7 @@ impl Machine {
                 // before executing the next instruction. The interval length was calculated based on the desired clockspeed.
                 if !max_speed && frame_timer.computed() {
                     frame_timer.sleep();
-                    frame_timer.reset();
+                    frame_timer.start();
                 }
             }
         });
