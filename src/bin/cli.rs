@@ -99,7 +99,7 @@ pub fn main() {
         args.offset.as_ref().map(str_to_hex).unwrap_or_default(),
     );
     d.reset();
-    // d.cpu.lock().pc = 0x400;
+    // d.cpu.lock().pc = 0x400;c
     // d.cpu.lock().pc = 0x4000;
 
     if let Some(start) = args.start {
@@ -131,13 +131,14 @@ pub fn main() {
 
         let mut tui = Tui::new(d);
         let t = tui.show();
-        // t.unwrap().join();
+        t.unwrap().join();
+
         #[cfg(feature = "sdl")]
         {
             use nes::display::Display;
             let mut display = Display::new(c);
             display.show();
-            tui.hide();
         }
+        tui.hide();
     }
 }

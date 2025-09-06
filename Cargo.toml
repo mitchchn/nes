@@ -33,7 +33,7 @@ rpath = false
 
 
 [features]
-default = ["sdl", "libretro"]
+default = []
 sdl = ["dep:sdl2"]
 libretro = ["dep:libretro-rs"]
 
